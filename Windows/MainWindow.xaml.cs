@@ -355,6 +355,13 @@ public partial class MainWindow : Window
                 DiagVerdict.Foreground = Muted;
                 DiagReason.Text = "Ця програма у виключеннях (сторінка «Програми»).";
                 return;
+            case "elevated":
+                DiagWord.Text = w.Typed;
+                DiagVerdict.Text = "Не виправляється: програму запущено від адміністратора";
+                DiagVerdict.Foreground = Orange;
+                DiagReason.Text = "Windows не дозволяє звичайній програмі вводити текст у вікна адміністратора. "
+                                + "Запустіть цю програму без прав адміністратора або Bison Switcher від адміністратора.";
+                return;
             case "undo":
                 DiagWord.Text = $"{w.Typed} → {w.Alt}";
                 DiagVerdict.Text = "Скасовано вами (Backspace)";

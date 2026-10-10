@@ -348,6 +348,16 @@ public sealed class AutoFixEngine : IDisposable
             return false;
         }
 
+        // UIPI: Windows silently drops input injected into an admin window from a
+        // normal process. Fixing would swallow the Space and type nothing.
+        if (fg.CurrentIsElevated && !Environment.IsPrivilegedProcess)
+        {
+            string app = fg.CurrentExePath is { } p0 ? Path.GetFileName(p0) : "?";
+            LastDecision = $"{app}: elevated";
+            LastWord = new WordInfo(app, "", false, "elevated");
+            return false;
+        }
+
         IntPtr cur = LanguageManager.CurrentHkl();
         bool curLatin = LanguageManager.IsLatin(cur);
         var other = LanguageManager.Enabled().FirstOrDefault(l => LanguageManager.IsLatin(l.Hkl) != curLatin);

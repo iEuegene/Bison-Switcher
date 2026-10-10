@@ -171,6 +171,17 @@ internal static class NativeMethods
     [DllImport("kernel32.dll")]
     public static extern bool CloseHandle(IntPtr hObject);
 
+    // ---- Process elevation (UIPI: a normal process can't type into an admin window) ----
+    public const uint TOKEN_QUERY = 0x0008;
+    public const int TokenElevation = 20;
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool GetTokenInformation(IntPtr tokenHandle, int tokenInformationClass,
+        out int tokenInformation, int tokenInformationLength, out int returnLength);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern bool QueryFullProcessImageName(IntPtr hProcess, uint dwFlags,
         System.Text.StringBuilder lpExeName, ref uint lpdwSize);

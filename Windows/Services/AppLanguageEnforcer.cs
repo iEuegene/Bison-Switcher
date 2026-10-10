@@ -15,6 +15,9 @@ public sealed class AppLanguageEnforcer : IDisposable
     /// <summary>The app in the foreground right now (may be Kright itself).</summary>
     public uint CurrentPid { get; private set; }
     public string? CurrentExePath { get; private set; }
+    /// <summary>The foreground app runs elevated (or can't be inspected, which in
+    /// practice means the same): input injected from Kright would be dropped.</summary>
+    public bool CurrentIsElevated { get; private set; }
 
     /// <summary>Raised on every foreground-window change.</summary>
     public event Action? ForegroundChanged;
@@ -66,6 +69,7 @@ public sealed class AppLanguageEnforcer : IDisposable
         string? exePath = GetProcessPath(pid);
         CurrentPid = pid;
         CurrentExePath = exePath;
+        CurrentIsElevated = IsElevated(pid);
         ForegroundChanged?.Invoke();
 
         // Always track the last non-Kright foreground app (even when disabled)
@@ -98,6 +102,25 @@ public sealed class AppLanguageEnforcer : IDisposable
         if (pid == CurrentPid && CurrentExePath != null) return;
         CurrentPid = pid;
         CurrentExePath = GetProcessPath(pid);
+        CurrentIsElevated = IsElevated(pid);
+    }
+
+    internal static bool IsElevated(uint pid)
+    {
+        var process = NativeMethods.OpenProcess(NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process == IntPtr.Zero) return true; // can't even query it: treat as protected
+        try
+        {
+            // A non-elevated process is denied TOKEN_QUERY on an elevated one.
+            if (!NativeMethods.OpenProcessToken(process, NativeMethods.TOKEN_QUERY, out var token)) return true;
+            try
+            {
+                return NativeMethods.GetTokenInformation(token, NativeMethods.TokenElevation,
+                           out int elevated, sizeof(int), out _) && elevated != 0;
+            }
+            finally { NativeMethods.CloseHandle(token); }
+        }
+        finally { NativeMethods.CloseHandle(process); }
     }
 
     internal static string? GetProcessPath(uint pid)
