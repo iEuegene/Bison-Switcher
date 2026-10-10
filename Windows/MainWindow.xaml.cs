@@ -33,12 +33,31 @@ public partial class MainWindow : Window
 
         HotkeyText.Text = App.Hotkey.DisplayString;
         AutoLangCheck.IsChecked = App.Enforcer.Enabled;
+        AddressBarCheck.IsChecked = App.Enforcer.AddressBarEnabled;
+
+        // Auto-fix section
+        AutoFixCheck.IsChecked = App.AutoFix.Enabled;
+        UndoCheck.IsChecked = AppSettings.Current.AutoFixUndoOnBackspace;
+        LearnCheck.IsChecked = AppSettings.Current.AutoFixLearnFromUndo && AppSettings.Current.AutoFixLearnFromHotkey;
+        SensitivityCombo.SelectedIndex = Math.Clamp(AppSettings.Current.AutoFixSensitivity, 0, 2);
+        App.AutoFix.StateChanged += () =>
+        {
+            if (!IsVisible) return; // refreshed on activation instead
+            Dispatcher.InvokeAsync(() =>
+            {
+                AutoFixCheck.IsChecked = App.AutoFix.Enabled;
+                RefreshWordLists();
+            });
+        };
+        RefreshExcludedList();
+        RefreshWordLists();
+        StartupCheck.IsChecked = StartupManager.IsEnabled;
 
         DebugCheck.IsChecked = AppSettings.Current.DebugMode;
         ApplyDebugMode(AppSettings.Current.DebugMode);
 
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = $"Kright {v?.ToString(3) ?? "1.0.0"}";
+        VersionText.Text = $"Kright {v?.ToString(3) ?? "1.0.0"} · UA auto-fix fork";
 
         // Per-app keyboard section
         AppLangCheck.IsChecked = App.AppEnforcer.Enabled;
@@ -62,6 +81,9 @@ public partial class MainWindow : Window
         base.OnActivated(e);
         UpdateAddButtonLabel();
         UpdateAddContactButtonLabel();
+        UpdateExcludeButtonLabel();
+        AutoFixCheck.IsChecked = App.AutoFix.Enabled;
+        RefreshWordLists();
     }
 
     public void SelectTab(int index)
@@ -125,7 +147,7 @@ public partial class MainWindow : Window
 
         // Punctuation keys — show both EN and HE since neither is obvious
         sb.AppendLine();
-        sb.AppendLine("Punctuation  (KEY: English→Hebrew)");
+        sb.AppendLine($"Punctuation  (KEY: {latin.Name}→{other.Name})");
         (uint vk, string key)[] punctKeys =
         [
             (0xBA, ";"), (0xDE, "'"), (0xBC, ","), (0xBE, "."), (0xBF, "/"), (0xC0, "`"),
@@ -179,6 +201,7 @@ public partial class MainWindow : Window
         }
 
         if (App.Enforcer.LastAction is { } a) AutoLangStatus.Text = a;
+        AutoFixDecisionText.Text = App.AutoFix.LastDecision ?? "—";
     }
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
@@ -196,7 +219,7 @@ public partial class MainWindow : Window
     private void RecordButton_Click(object sender, RoutedEventArgs e)
     {
         _recording = !_recording;
-        RecordButton.Content = _recording ? "Press keys… (Esc to cancel)" : "Change…";
+        RecordButton.Content = _recording ? "Натисніть комбінацію… (Esc — скасувати)" : "Змінити…";
         HotkeyText.Text = _recording ? "…" : App.Hotkey.DisplayString;
     }
 
@@ -239,7 +262,7 @@ public partial class MainWindow : Window
     private void StopRecording()
     {
         _recording = false;
-        RecordButton.Content = "Change…";
+        RecordButton.Content = "Змінити…";
         HotkeyText.Text = App.Hotkey.DisplayString;
     }
 
@@ -275,18 +298,18 @@ public partial class MainWindow : Window
         var appName = App.AppEnforcer.LastExternalAppName;
         if (exePath == null || appName == null)
         {
-            ShowAddStatus("Switch to an app first, then click Add.");
+            ShowAddStatus("Спершу перейдіть у потрібну програму, потім натисніть «Додати».");
             return;
         }
         if (AppSettings.Current.AppLanguageRules.Any(r =>
             string.Equals(r.ExePath, exePath, StringComparison.OrdinalIgnoreCase)))
         {
-            ShowAddStatus($"{appName} is already in the list.");
+            ShowAddStatus($"{appName} вже в списку.");
             return;
         }
         if (AddLayoutCombo.SelectedItem is not ComboBoxItem { Tag: InputLanguage lang })
         {
-            ShowAddStatus("Pick a layout first.");
+            ShowAddStatus("Спершу виберіть розкладку.");
             return;
         }
         AppSettings.Current.AppLanguageRules.Add(new AppLanguageRule
@@ -298,7 +321,7 @@ public partial class MainWindow : Window
         });
         AppSettings.Save();
         RefreshRulesList();
-        ShowAddStatus($"Added {appName}.");
+        ShowAddStatus($"Додано: {appName}.");
     }
 
     private void RefreshRulesList()
@@ -313,8 +336,8 @@ public partial class MainWindow : Window
     private void UpdateAddButtonLabel()
     {
         AddAppButton.Content = App.AppEnforcer.LastExternalAppName is { } n
-            ? $"+ Add \"{n}\""
-            : "+ Add current app";
+            ? $"+ Додати «{n}»"
+            : "+ Додати поточну програму";
     }
 
     private UIElement BuildRuleRow(AppLanguageRule rule, List<InputLanguage> langs)
@@ -420,18 +443,18 @@ public partial class MainWindow : Window
         var contact = App.ContactEnforcer.LastContactName;
         if (app == null || string.IsNullOrEmpty(contact))
         {
-            ShowContactStatus("Open a Teams chat first, then click Add.");
+            ShowContactStatus("Спершу відкрийте чат у Teams, потім натисніть «Додати».");
             return;
         }
         if (AppSettings.Current.ContactLanguageRules.Any(r =>
             r.App == app.Value && r.ContactName == contact))
         {
-            ShowContactStatus($"{contact} is already in the list.");
+            ShowContactStatus($"{contact} вже в списку.");
             return;
         }
         if (ContactLayoutCombo.SelectedItem is not ComboBoxItem { Tag: InputLanguage lang })
         {
-            ShowContactStatus("Pick a layout first.");
+            ShowContactStatus("Спершу виберіть розкладку.");
             return;
         }
         AppSettings.Current.ContactLanguageRules.Add(new ContactLanguageRule
@@ -443,7 +466,7 @@ public partial class MainWindow : Window
         });
         AppSettings.Save();
         RefreshContactRulesList();
-        ShowContactStatus($"Added {contact}.");
+        ShowContactStatus($"Додано: {contact}.");
     }
 
     private void RefreshContactRulesList()
@@ -458,8 +481,8 @@ public partial class MainWindow : Window
     private void UpdateAddContactButtonLabel()
     {
         AddContactButton.Content = App.ContactEnforcer.LastContactName is { } n
-            ? $"+ Add \"{n}\""
-            : "+ Add current Teams chat";
+            ? $"+ Додати «{n}»"
+            : "+ Додати поточний чат Teams";
     }
 
     private UIElement BuildContactRuleRow(ContactLanguageRule rule, List<InputLanguage> langs)
@@ -535,4 +558,199 @@ public partial class MainWindow : Window
         };
         _contactStatusTimer.Start();
     }
+
+    // ---- Auto-fix ----
+
+    private void AutoFixCheck_Click(object sender, RoutedEventArgs e)
+        => App.AutoFix.Enabled = AutoFixCheck.IsChecked == true;
+
+    private void UndoCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.AutoFixUndoOnBackspace = UndoCheck.IsChecked == true;
+        AppSettings.Save();
+    }
+
+    private void LearnCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = LearnCheck.IsChecked == true;
+        AppSettings.Current.AutoFixLearnFromUndo = on;
+        AppSettings.Current.AutoFixLearnFromHotkey = on;
+        AppSettings.Save();
+    }
+
+    private void SensitivityCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SensitivityCombo.SelectedIndex < 0) return;
+        AppSettings.Current.AutoFixSensitivity = SensitivityCombo.SelectedIndex;
+        AppSettings.Save();
+    }
+
+    private void AddressBarCheck_Click(object sender, RoutedEventArgs e)
+        => App.Enforcer.AddressBarEnabled = AddressBarCheck.IsChecked == true;
+
+    private void StartupCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool want = StartupCheck.IsChecked == true;
+        if (!StartupManager.Set(want)) StartupCheck.IsChecked = !want;
+    }
+
+    // ---- Excluded apps ----
+
+    private DispatcherTimer? _excludeStatusTimer;
+
+    private void UpdateExcludeButtonLabel()
+    {
+        ExcludeAppButton.Content = App.AppEnforcer.LastExternalAppName is { } n
+            ? $"+ Виключити «{n}»"
+            : "+ Виключити поточну програму";
+    }
+
+    private void ExcludeAppButton_Click(object sender, RoutedEventArgs e)
+    {
+        var exePath = App.AppEnforcer.LastExternalExePath;
+        var appName = App.AppEnforcer.LastExternalAppName;
+        if (exePath == null || appName == null)
+        {
+            ShowExcludeStatus("Спершу перейдіть у потрібну програму, потім натисніть кнопку.");
+            return;
+        }
+        string exeName = System.IO.Path.GetFileName(exePath);
+        var list = AppSettings.Current.AutoFixExcludedApps;
+        if (list.Any(a => string.Equals(a.ExeName, exeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            ShowExcludeStatus($"{appName} вже виключено.");
+            return;
+        }
+        list.Add(new ExcludedApp { ExeName = exeName, AppName = appName, ExePath = exePath });
+        AppSettings.Save();
+        App.AutoFix.InvalidateLists();
+        RefreshExcludedList();
+        ShowExcludeStatus($"Виключено: {appName}.");
+    }
+
+    private void RefreshExcludedList()
+    {
+        ExcludedPanel.Children.Clear();
+        foreach (var app in AppSettings.Current.AutoFixExcludedApps.ToList())
+        {
+            var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+
+            if (!string.IsNullOrEmpty(app.ExePath) && LoadAppIcon(app.ExePath) is { } icon)
+            {
+                var img = new System.Windows.Controls.Image
+                    { Source = icon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(img, 0);
+                grid.Children.Add(img);
+            }
+
+            var name = new TextBlock
+            {
+                Text = $"{app.AppName}  ({app.ExeName})", FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(name, 1);
+            grid.Children.Add(name);
+
+            var del = DeleteButton();
+            del.Click += (_, _) =>
+            {
+                AppSettings.Current.AutoFixExcludedApps.Remove(app);
+                AppSettings.Save();
+                App.AutoFix.InvalidateLists();
+                RefreshExcludedList();
+            };
+            Grid.SetColumn(del, 2);
+            grid.Children.Add(del);
+
+            ExcludedPanel.Children.Add(grid);
+        }
+        UpdateExcludeButtonLabel();
+    }
+
+    private void ShowExcludeStatus(string msg)
+    {
+        ExcludeStatus.Text = msg;
+        ExcludeStatus.Visibility = Visibility.Visible;
+        _excludeStatusTimer?.Stop();
+        _excludeStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _excludeStatusTimer.Tick += (_, _) =>
+        {
+            _excludeStatusTimer.Stop();
+            ExcludeStatus.Visibility = Visibility.Collapsed;
+        };
+        _excludeStatusTimer.Start();
+    }
+
+    // ---- Personal dictionary ----
+
+    private void AddNever_Click(object sender, RoutedEventArgs e) => AddFromBox(NeverBox, never: true);
+    private void AddAlways_Click(object sender, RoutedEventArgs e) => AddFromBox(AlwaysBox, never: false);
+
+    private void NeverBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { AddFromBox(NeverBox, never: true); e.Handled = true; }
+    }
+
+    private void AlwaysBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { AddFromBox(AlwaysBox, never: false); e.Handled = true; }
+    }
+
+    private void AddFromBox(System.Windows.Controls.TextBox box, bool never)
+    {
+        // Several words at once: "seo, inweb, horoshop".
+        foreach (var w in box.Text.Split(new[] { ',', ';', ' ', '\n', '\r', '\t' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (never) UserWords.AddNever(w); else UserWords.AddAlways(w);
+        }
+        box.Clear();
+        RefreshWordLists();
+    }
+
+    private void RefreshWordLists()
+    {
+        FillChips(NeverPanel, AppSettings.Current.NeverConvert);
+        FillChips(AlwaysPanel, AppSettings.Current.AlwaysConvert);
+    }
+
+    private void FillChips(WrapPanel panel, List<string> list)
+    {
+        panel.Children.Clear();
+        foreach (var word in list.ToList())
+        {
+            var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            row.Children.Add(new TextBlock
+            {
+                Text = word, FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD))
+            });
+            var del = DeleteButton();
+            del.Width = del.Height = 16;
+            del.Margin = new Thickness(4, 0, 0, 0);
+            del.Click += (_, _) => { UserWords.Remove(list, word); RefreshWordLists(); };
+            row.Children.Add(del);
+            panel.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x1F)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(8, 2, 4, 2),
+                Margin = new Thickness(0, 0, 6, 6),
+                Child = row
+            });
+        }
+    }
+
+    private static Button DeleteButton() => new()
+    {
+        Content = "✕", Width = 20, Height = 20, FontSize = 11,
+        Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+        Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
+        VerticalAlignment = VerticalAlignment.Center
+    };
 }

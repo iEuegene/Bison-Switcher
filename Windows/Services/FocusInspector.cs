@@ -4,14 +4,24 @@ namespace Kright.Services;
 
 public record FocusedField(
     string ControlType, string Name, string HelpText, bool IsPassword, string Value,
-    string AutomationId = "")
+    string AutomationId = "", string ClassName = "")
 {
+    public const string AddressBarKind = "Address bar";
+
+    /// <summary>Browser address bar: Chromium (Chrome, Edge, Brave, Vivaldi, Opera)
+    /// draws it as OmniboxViewViews; Firefox's input has id "urlbar-input".</summary>
+    public bool IsAddressBar =>
+        ClassName == "OmniboxViewViews" ||
+        AutomationId == "urlbar-input" ||
+        AutomationId == "urlbar";
+
     /// <summary>Best-effort field-type inference (mirrors the macOS guess).</summary>
     public string Guess
     {
         get
         {
             if (IsPassword) return "Password";
+            if (IsAddressBar) return AddressBarKind;
             // Web inputs often expose their purpose only via the id (AutomationId),
             // e.g. id="email", so fold it into the keyword haystack too.
             string hay = (Name + " " + HelpText + " " + AutomationId).ToLowerInvariant();
@@ -54,7 +64,8 @@ public static class FocusInspector
                 HelpText: info.HelpText ?? "",
                 IsPassword: info.IsPassword,
                 Value: value,
-                AutomationId: info.AutomationId ?? "");
+                AutomationId: info.AutomationId ?? "",
+                ClassName: info.ClassName ?? "");
         }
         catch { return null; }
     }

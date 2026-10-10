@@ -39,44 +39,114 @@
 
                     <TextBlock Text="DETECTED TYPE" FontWeight="Bold" FontSize="11" Foreground="#777" Margin="0,12,0,0"/>
                     <TextBlock x:Name="GuessText" Margin="0,4,0,0" FontSize="15" FontWeight="Bold" Foreground="#88CC88"/>
+
+                    <TextBlock Text="AUTO-FIX — LAST WORD" FontWeight="Bold" FontSize="11" Foreground="#777" Margin="0,12,0,0"/>
+                    <TextBlock x:Name="AutoFixDecisionText" Margin="0,4,0,0" FontFamily="Consolas" FontSize="12"
+                               Foreground="#CCC" TextWrapping="Wrap"/>
                 </StackPanel>
             </ScrollViewer>
         </TabItem>
 
         <!-- SETTINGS -->
-        <TabItem Header="Settings">
+        <!-- SETTINGS -->
+        <TabItem Header="Налаштування">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="16">
-                <TextBlock Text="Fix-layout shortcut" FontWeight="SemiBold"/>
-                <TextBlock Text="Press this anywhere to fix the focused field's last word."
+
+                <!-- ===== AUTO-FIX ===== -->
+                <TextBlock Text="Автовиправлення розкладки" FontWeight="SemiBold"/>
+                <CheckBox x:Name="AutoFixCheck" Margin="0,6,0,0" Foreground="#CCC"
+                          Click="AutoFixCheck_Click">
+                    <TextBlock Text="Виправляти слова, набрані не в тій розкладці (на пробілі, Tab, Enter)" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
+                <CheckBox x:Name="UndoCheck" Margin="0,4,0,0" Foreground="#CCC"
+                          Click="UndoCheck_Click">
+                    <TextBlock Text="Backspace одразу після заміни — повернути як було" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
+                <CheckBox x:Name="LearnCheck" Margin="0,4,0,0" Foreground="#CCC"
+                          Click="LearnCheck_Click">
+                    <TextBlock Text="Вчитися: скасоване → «не чіпати», двічі виправлене хоткеєм → «завжди»" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="Незнайомі слова:" Foreground="#AAA" FontSize="11"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="SensitivityCombo" Width="200" FontSize="11"
+                              SelectionChanged="SensitivityCombo_SelectionChanged">
+                        <ComboBoxItem Content="Обережно — майже не чіпати"/>
+                        <ComboBoxItem Content="Звичайно"/>
+                        <ComboBoxItem Content="Сміливо — більше виправлень"/>
+                    </ComboBox>
+                </StackPanel>
+                <TextBlock Foreground="#666" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                           Text="Слова зі словника (40 тис. UA + 40 тис. EN) виправляються однаково на будь-якому рівні; рівень впливає лише на рідкісні слова."/>
+
+                <Separator Margin="0,12"/>
+
+                <TextBlock Text="Програми-виключення" FontWeight="SemiBold"/>
+                <TextBlock Foreground="#666" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                           Text="Тут автовиправлення вимкнене. Хоткей працює й тут."/>
+                <StackPanel x:Name="ExcludedPanel" Margin="0,6,0,0"/>
+                <Button x:Name="ExcludeAppButton" Content="+ Виключити поточну програму"
+                        FontSize="11" Margin="0,8,0,0" HorizontalAlignment="Left"
+                        Click="ExcludeAppButton_Click"/>
+                <TextBlock x:Name="ExcludeStatus" FontSize="10" Foreground="#888"
+                           Margin="0,4,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
+
+                <Separator Margin="0,12"/>
+
+                <TextBlock Text="Мій словник" FontWeight="SemiBold"/>
+                <TextBlock Text="Ніколи не виправляти (як набрано: сленг, назви, логіни)"
+                           Foreground="#AAA" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBox x:Name="NeverBox" Width="200" FontSize="11" KeyDown="NeverBox_KeyDown"/>
+                    <Button Content="Додати" FontSize="11" Margin="6,0,0,0" Click="AddNever_Click"/>
+                </StackPanel>
+                <WrapPanel x:Name="NeverPanel" Margin="0,6,0,0"/>
+
+                <TextBlock Text="Завжди виправляти на (як має бути: терміни, імена)"
+                           Foreground="#AAA" FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBox x:Name="AlwaysBox" Width="200" FontSize="11" KeyDown="AlwaysBox_KeyDown"/>
+                    <Button Content="Додати" FontSize="11" Margin="6,0,0,0" Click="AddAlways_Click"/>
+                </StackPanel>
+                <WrapPanel x:Name="AlwaysPanel" Margin="0,6,0,0"/>
+
+                <Separator Margin="0,12"/>
+
+                <TextBlock Text="Хоткей ручного виправлення" FontWeight="SemiBold"/>
+                <TextBlock Text="Виправляє останнє слово у полі — там, де автоматика промовчала."
                            Foreground="#888" FontSize="11" Margin="0,2,0,6" TextWrapping="Wrap"/>
                 <StackPanel Orientation="Horizontal">
                     <Border Background="#1F1F1F" CornerRadius="6" Padding="10,5">
                         <TextBlock x:Name="HotkeyText" FontFamily="Consolas" Foreground="White"/>
                     </Border>
-                    <Button x:Name="RecordButton" Content="Change…" Margin="8,0,0,0" Click="RecordButton_Click"/>
+                    <Button x:Name="RecordButton" Content="Змінити…" Margin="8,0,0,0" Click="RecordButton_Click"/>
                 </StackPanel>
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="Auto keyboard language" FontWeight="SemiBold"/>
+                <TextBlock Text="Англійська автоматично" FontWeight="SemiBold"/>
                 <CheckBox x:Name="AutoLangCheck" Margin="0,6,0,0" Foreground="#CCC"
-                          Content="Switch to English on email / URL / password fields"
-                          Click="AutoLangCheck_Click"/>
+                          Click="AutoLangCheck_Click">
+                    <TextBlock Text="У полях email / URL / пароль" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
+                <CheckBox x:Name="AddressBarCheck" Margin="0,4,0,0" Foreground="#CCC"
+                          Click="AddressBarCheck_Click">
+                    <TextBlock Text="В адресному рядку браузера (Chrome, Edge, Brave, Opera, Vivaldi, Firefox)" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
                 <TextBlock x:Name="AutoLangStatus" Foreground="#88CC88" FontSize="11" Margin="0,4,0,0"/>
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="Per-app keyboard" FontWeight="SemiBold"/>
+                <TextBlock Text="Розкладка для програми" FontWeight="SemiBold"/>
                 <CheckBox x:Name="AppLangCheck" Margin="0,6,0,0" Foreground="#CCC"
-                          Content="Switch keyboard when app gains focus"
-                          Click="AppLangCheck_Click"/>
-                <TextBlock Foreground="#666" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
-                           Text="When you switch to a listed app, Kright immediately changes to its configured layout."/>
+                          Click="AppLangCheck_Click">
+                    <TextBlock Text="Перемикати розкладку, коли програма отримує фокус" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
                 <StackPanel x:Name="RulesPanel" Margin="0,6,0,0"/>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <ComboBox x:Name="AddLayoutCombo" Width="80" Margin="0,0,8,0" FontSize="11"/>
-                    <Button x:Name="AddAppButton" Content="+ Add current app"
+                    <Button x:Name="AddAppButton" Content="+ Додати поточну програму"
                             FontSize="11" Click="AddAppButton_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="AddAppStatus" FontSize="10" Foreground="#888"
@@ -84,16 +154,15 @@
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="Per-contact keyboard" FontWeight="SemiBold"/>
+                <TextBlock Text="Розкладка для чату Teams" FontWeight="SemiBold"/>
                 <CheckBox x:Name="ContactLangCheck" Margin="0,6,0,0" Foreground="#CCC"
-                          Content="Switch keyboard per Teams chat"
-                          Click="ContactLangCheck_Click"/>
-                <TextBlock Foreground="#666" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
-                           Text="Open a Teams chat, then click &quot;+ Add current Teams chat&quot;. Kright switches to that contact's layout whenever the chat is open."/>
+                          Click="ContactLangCheck_Click">
+                    <TextBlock Text="Перемикати розкладку для окремих чатів Teams" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
                 <StackPanel x:Name="ContactRulesPanel" Margin="0,6,0,0"/>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <ComboBox x:Name="ContactLayoutCombo" Width="80" Margin="0,0,8,0" FontSize="11"/>
-                    <Button x:Name="AddContactButton" Content="+ Add current Teams chat"
+                    <Button x:Name="AddContactButton" Content="+ Додати поточний чат Teams"
                             FontSize="11" Click="AddContactButton_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="AddContactStatus" FontSize="10" Foreground="#888"
@@ -101,39 +170,40 @@
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="Developer" FontWeight="SemiBold"/>
-                <CheckBox x:Name="DebugCheck" Margin="0,6,0,0" Foreground="#CCC"
-                          Content="Debug mode — show the Detect tab" Click="DebugCheck_Click"/>
+                <TextBlock Text="Запуск" FontWeight="SemiBold"/>
+                <CheckBox x:Name="StartupCheck" Margin="0,6,0,0" Foreground="#CCC" Click="StartupCheck_Click">
+                    <TextBlock Text="Запускати разом з Windows" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="Privacy" FontWeight="SemiBold"/>
-                <TextBlock Foreground="#AAAAAA" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Kright doesn't collect your data — it all happens on your PC. Your typing is never stored or sent anywhere, only used to fix the word you just typed."/>
+                <TextBlock Text="Для розробника" FontWeight="SemiBold"/>
+                <CheckBox x:Name="DebugCheck" Margin="0,6,0,0" Foreground="#CCC" Click="DebugCheck_Click">
+                    <TextBlock Text="Debug — показати вкладку Detect" TextWrapping="Wrap" Foreground="#CCC"/>
+                </CheckBox>
+
+                <Separator Margin="0,12"/>
+
+                <TextBlock Text="Приватність" FontWeight="SemiBold"/>
                 <TextBlock Foreground="#8BBE8B" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="• No network — it makes zero internet requests, ever."/>
+                           Text="• Без мережі: жодних запитів в інтернет, оновлення вимкнені."/>
                 <TextBlock Foreground="#8BBE8B" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
-                           Text="• No storage — what you type is never logged or saved to disk."/>
+                           Text="• Без журналу: у пам'яті лише поточне слово, на диск нічого не пишеться."/>
                 <TextBlock Foreground="#8BBE8B" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
-                           Text="• Password-safe — it stops listening on password fields."/>
-                <TextBlock Foreground="#8BBE8B" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
-                           Text="• Open source — verify every word of this in the code on GitHub."/>
+                           Text="• Поля паролів: перехоплення вимикається, поки курсор у такому полі."/>
 
                 <Separator Margin="0,12"/>
 
-                <TextBlock Text="About" FontWeight="SemiBold"/>
-                <TextBlock x:Name="VersionText" Foreground="#CCC" Margin="0,6,0,0"/>
-                <TextBlock Text="Keyboard done right."
-                           Foreground="#888" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                <TextBlock Margin="0,6,0,0" FontSize="11">
+                <TextBlock x:Name="VersionText" Foreground="#CCC"/>
+                <TextBlock Margin="0,4,0,0" FontSize="11">
                     <Hyperlink NavigateUri="https://github.com/walteryaron/Kright"
-                               RequestNavigate="Hyperlink_RequestNavigate">View on GitHub</Hyperlink>
-                    <Run Text="   ·   by Yaron Walter" Foreground="#888"/>
+                               RequestNavigate="Hyperlink_RequestNavigate">Kright на GitHub</Hyperlink>
+                    <Run Text="   ·   оригінал: Yaron Walter, MIT" Foreground="#888"/>
                 </TextBlock>
 
                 <Separator Margin="0,12"/>
 
-                <Button Content="Quit Kright" HorizontalAlignment="Left" Click="Quit_Click"/>
+                <Button Content="Вийти з Kright" HorizontalAlignment="Left" Click="Quit_Click"/>
             </StackPanel>
             </ScrollViewer>
         </TabItem>

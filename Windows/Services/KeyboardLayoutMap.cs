@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Kright.Native;
 
@@ -15,7 +16,8 @@ public static class KeyboardLayoutMap
     private static readonly uint[] VKeys = BuildVKeyList();
 
     // hkl -> (vk -> char). Layouts are static, so cache.
-    private static readonly Dictionary<IntPtr, Dictionary<uint, string>> ForwardCache = new();
+    // Concurrent: read from the UI thread and from the auto-fix hook thread.
+    private static readonly ConcurrentDictionary<IntPtr, Dictionary<uint, string>> ForwardCache = new();
 
     public static string? Convert(string text, IntPtr fromHkl, IntPtr toHkl)
     {
@@ -52,6 +54,25 @@ public static class KeyboardLayoutMap
         return map;
     }
 
+    private static readonly ConcurrentDictionary<IntPtr, Dictionary<uint, string>> ShiftedCache = new();
+
+    /// <summary>vk → character with Shift held (upper-case letters, and e.g.
+    /// '{' on EN vs 'Х' on UA for the same key). Used by auto-fix to render the
+    /// exact keystrokes in either layout.</summary>
+    public static Dictionary<uint, string> ShiftedMap(IntPtr hkl)
+    {
+        if (ShiftedCache.TryGetValue(hkl, out var cached)) return cached;
+        var map = new Dictionary<uint, string>();
+        foreach (var vk in VKeys)
+        {
+            var ch = CharFor(vk, hkl, shift: true);
+            if (!string.IsNullOrEmpty(ch) && ch != " ")
+                map[vk] = ch!;
+        }
+        ShiftedCache[hkl] = map;
+        return map;
+    }
+
     private static Dictionary<char, uint> ReverseMap(IntPtr hkl)
     {
         var map = new Dictionary<char, uint>();
@@ -61,10 +82,11 @@ public static class KeyboardLayoutMap
         return map;
     }
 
-    private static string? CharFor(uint vk, IntPtr hkl)
+    private static string? CharFor(uint vk, IntPtr hkl, bool shift = false)
     {
         uint scan = NativeMethods.MapVirtualKeyEx(vk, NativeMethods.MAPVK_VK_TO_VSC, hkl);
         var keyState = new byte[256]; // all up: base (unshifted) character
+        if (shift) keyState[NativeMethods.VK_SHIFT] = 0x80;
         var sb = new StringBuilder(8);
         int rc = NativeMethods.ToUnicodeEx(vk, scan, keyState, sb, sb.Capacity, 0, hkl);
         // rc > 0: that many chars written. rc < 0: dead key. 0: no translation.

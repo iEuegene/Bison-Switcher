@@ -55,6 +55,43 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern IntPtr GetModuleHandle(string lpModuleName);
 
+    // Mouse hook shares the LowLevelKeyboardProc signature (int, IntPtr, IntPtr).
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207,
+                     WM_XBUTTONDOWN = 0x020B;
+
+    /// <summary>KBDLLHOOKSTRUCT.flags bit: the event was injected (SendInput etc.).</summary>
+    public const uint LLKHF_INJECTED = 0x10;
+
+    // ---- Message loop for the auto-fix hook thread ----
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public int ptX;
+        public int ptY;
+    }
+
+    public const uint WM_QUIT = 0x0012;
+    [DllImport("user32.dll")] public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+    [DllImport("user32.dll")] public static extern bool TranslateMessage(ref MSG lpMsg);
+    [DllImport("user32.dll")] public static extern IntPtr DispatchMessage(ref MSG lpMsg);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+    [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
+
+    public const int VK_TAB = 0x09, VK_RETURN = 0x0D, VK_SHIFT = 0x10, VK_CONTROL = 0x11,
+                     VK_MENU = 0x12, VK_CAPITAL = 0x14, VK_ESCAPE = 0x1B, VK_SPACE = 0x20,
+                     VK_DELETE = 0x2E, VK_LWIN = 0x5B, VK_RWIN = 0x5C,
+                     VK_LSHIFT = 0xA0, VK_RSHIFT = 0xA1, VK_LCONTROL = 0xA2, VK_RCONTROL = 0xA3,
+                     VK_LMENU = 0xA4, VK_RMENU = 0xA5;
+
     [StructLayout(LayoutKind.Sequential)]
     public struct KBDLLHOOKSTRUCT
     {
@@ -79,8 +116,26 @@ internal static class NativeMethods
     [StructLayout(LayoutKind.Sequential)]
     public struct INPUT { public int type; public InputUnion u; }
 
+    // The union MUST include MOUSEINPUT (its largest member): SendInput rejects the
+    // call when cbSize != sizeof(INPUT) — 40 bytes on x64, but only 32 with a
+    // keyboard-only union, which silently made every injection fail.
     [StructLayout(LayoutKind.Explicit)]
-    public struct InputUnion { [FieldOffset(0)] public KEYBDINPUT ki; }
+    public struct InputUnion
+    {
+        [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public MOUSEINPUT mi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public UIntPtr dwExtraInfo;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct KEYBDINPUT

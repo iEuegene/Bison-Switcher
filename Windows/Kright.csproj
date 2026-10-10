@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Kright</AssemblyName>
     <RootNamespace>Kright</RootNamespace>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <!-- UI Automation (focused-field detection) ships with the Windows Desktop
@@ -27,6 +27,11 @@
   <ItemGroup>
     <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.0.4" />
     <PackageReference Include="NetSparkleUpdater.UI.WPF" Version="3.0.4" />
+  </ItemGroup>
+
+  <!-- Frequency dictionaries for auto-fix (wordfreq top-40k, CC BY-SA 4.0). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Dict\words_*.txt" />
   </ItemGroup>
 
   <!-- The test project lives under Tests/; keep its files out of the app build

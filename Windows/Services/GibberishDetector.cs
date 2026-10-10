@@ -32,4 +32,15 @@ public static class GibberishDetector
         double conf = (dst.Confidence(convScore) + (1 - src.Confidence(typedScore))) / 2;
         return (wrong, conf);
     }
+
+    /// <summary>0..1 confidence that <paramref name="word"/> is a real word of
+    /// <paramref name="lang"/>, or null if no model exists for that language.</summary>
+    public static double? WordConfidence(string word, string lang)
+    {
+        var m = Model(lang);
+        return m is null ? null : m.Confidence(m.Score(word));
+    }
+
+    /// <summary>Whether a model is bundled for <paramref name="lang"/>.</summary>
+    public static bool Supports(string lang) => Model(lang) is not null;
 }

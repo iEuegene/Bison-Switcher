@@ -12,6 +12,13 @@ namespace Kright.Services;
 /// the foreground app when the button is clicked).</summary>
 public sealed class AppLanguageEnforcer : IDisposable
 {
+    /// <summary>The app in the foreground right now (may be Kright itself).</summary>
+    public uint CurrentPid { get; private set; }
+    public string? CurrentExePath { get; private set; }
+
+    /// <summary>Raised on every foreground-window change.</summary>
+    public event Action? ForegroundChanged;
+
     public string? LastExternalExePath { get; private set; }
     public string? LastExternalAppName { get; private set; }
 
@@ -33,6 +40,7 @@ public sealed class AppLanguageEnforcer : IDisposable
     public void Start()
     {
         if (_hook != IntPtr.Zero) return;
+        RefreshCurrent();
         _hook = NativeMethods.SetWinEventHook(
             NativeMethods.EVENT_SYSTEM_FOREGROUND,
             NativeMethods.EVENT_SYSTEM_FOREGROUND,
@@ -56,6 +64,9 @@ public sealed class AppLanguageEnforcer : IDisposable
         NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
 
         string? exePath = GetProcessPath(pid);
+        CurrentPid = pid;
+        CurrentExePath = exePath;
+        ForegroundChanged?.Invoke();
 
         // Always track the last non-Kright foreground app (even when disabled)
         // so "Add current app" can read it from the Settings window.
@@ -77,7 +88,19 @@ public sealed class AppLanguageEnforcer : IDisposable
             LanguageManager.Switch(lang.Hkl);
     }
 
-    private static string? GetProcessPath(uint pid)
+    /// <summary>Re-read the foreground app (cheap; used when the WinEvent may
+    /// have been missed, e.g. right after startup).</summary>
+    public void RefreshCurrent()
+    {
+        var hwnd = NativeMethods.GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return;
+        NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == CurrentPid && CurrentExePath != null) return;
+        CurrentPid = pid;
+        CurrentExePath = GetProcessPath(pid);
+    }
+
+    internal static string? GetProcessPath(uint pid)
     {
         var handle = NativeMethods.OpenProcess(
             NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
@@ -93,7 +116,7 @@ public sealed class AppLanguageEnforcer : IDisposable
         finally { NativeMethods.CloseHandle(handle); }
     }
 
-    private static string GetAppName(string exePath, uint pid)
+    internal static string GetAppName(string exePath, uint pid)
     {
         try
         {

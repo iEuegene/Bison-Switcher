@@ -31,10 +31,27 @@ public partial class App : Application
     public static AppLanguageEnforcer AppEnforcer { get; private set; } = null!;
     public static ContactLanguageEnforcer ContactEnforcer { get; private set; } = null!;
     public static PrivacyMonitor Privacy { get; private set; } = null!;
+    public static AutoFixEngine AutoFix { get; private set; } = null!;
+
+    private static System.Threading.Mutex? _singleInstance;
+    private ToolStripMenuItem? _autoFixItem;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // One copy only: autostart + installer shortcut + a manual launch would
+        // otherwise stack keyboard hooks and fix every word twice.
+        _singleInstance = new System.Threading.Mutex(true, @"Local\Kright.SingleInstance", out bool first);
+        if (!first) { Shutdown(); return; }
+
+        // Parse the dictionaries and bigram models off the UI thread now, so the
+        // first word typed doesn't pay for it inside the keyboard hook.
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            WordRanks.Embedded.Warm("uk", "en");
+            GibberishDetector.Supports("en");
+        });
 
         Hotkey = new HotkeyManager();
         Hotkey.Triggered += FixFocusedLayout;
@@ -48,6 +65,11 @@ public partial class App : Application
         ContactEnforcer = new ContactLanguageEnforcer();
         ContactEnforcer.Start();
 
+        AutoFix = new AutoFixEngine();
+        AutoFix.Start();
+        AppEnforcer.ForegroundChanged += AutoFix.FocusMoved;
+        AutoFix.StateChanged += () => { if (_autoFixItem != null) _autoFixItem.Checked = AutoFix.Enabled; };
+
         SetupTray();
 
         // Blind mode: when a password field is focused, show a slashed-eye icon
@@ -56,7 +78,9 @@ public partial class App : Application
         Privacy.SensitiveChanged += OnSensitiveChanged;
         Privacy.Start();
 
-        SetupUpdater();
+        // This build is a personal fork: the upstream updater would replace it
+        // with the official release, so update checks are off.
+        // SetupUpdater();
     }
 
     // ---- Auto-update (NetSparkle) ----
@@ -97,7 +121,7 @@ public partial class App : Application
     private void OnSensitiveChanged(bool sensitive)
     {
         _tray.Icon = sensitive ? TrayIcons.Blind : TrayIcons.Normal;
-        _tray.Text = sensitive ? "Kright — not reading (password field)" : "Kright";
+        _tray.Text = sensitive ? "Kright — поле пароля, не читаю" : "Kright";
     }
 
     // ---- Tray ----
@@ -105,12 +129,17 @@ public partial class App : Application
     private void SetupTray()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Open", null, (_, _) => ToggleWindow());
-        menu.Items.Add("Settings", null, (_, _) => ShowWindow(tab: 1));
-        menu.Items.Add("Check for Updates…", null,
-            async (_, _) => { if (_sparkle is not null) await _sparkle.CheckForUpdatesAtUserRequest(); });
+        _autoFixItem = new ToolStripMenuItem("Автовиправлення")
+        {
+            Checked = AutoFix.Enabled,
+            CheckOnClick = true,
+        };
+        _autoFixItem.Click += (_, _) => AutoFix.Enabled = _autoFixItem.Checked;
+        menu.Items.Add(_autoFixItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit Kright", null, (_, _) => Shutdown());
+        menu.Items.Add("Налаштування", null, (_, _) => ShowWindow(tab: 1));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Вийти з Kright", null, (_, _) => Shutdown());
 
         _tray = new NotifyIcon
         {
@@ -159,6 +188,10 @@ public partial class App : Application
         // user keeps typing in the right layout instead of more gibberish.
         if (s.ToHkl != IntPtr.Zero) LanguageManager.Switch(s.ToHkl);
 
+        // The text under the caret changed behind auto-fix's back.
+        AutoFix.Reset();
+        UserWords.LearnFromHotkey(s.Original, s.Converted);
+
         if (FocusInspector.TrySetFocusedValue(s.FullReplacement)) return;
 
         // Read-only (console/terminal) → keystroke fallback on a background thread.
@@ -168,11 +201,12 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _tray.Visible = false;
-        _tray.Dispose();
-        Hotkey.Dispose();
-        AppEnforcer.Dispose();
-        ContactEnforcer.Dispose();
+        // Null-safe: a second instance shuts down before anything is created.
+        if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
+        AutoFix?.Dispose();
+        Hotkey?.Dispose();
+        AppEnforcer?.Dispose();
+        ContactEnforcer?.Dispose();
         _sparkle?.Dispose();
         base.OnExit(e);
     }

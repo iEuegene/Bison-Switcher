@@ -18,11 +18,24 @@ public sealed class FocusLanguageEnforcer
         {
             AppSettings.Current.AutoEnglishOnLatinFields = value;
             AppSettings.Save();
-            if (value) _timer.Start(); else _timer.Stop();
+            _timer.Start(); // always on: auto-fix reads LastGuess
+        }
+    }
+
+    public bool AddressBarEnabled
+    {
+        get => AppSettings.Current.AutoEnglishInAddressBar;
+        set
+        {
+            AppSettings.Current.AutoEnglishInAddressBar = value;
+            AppSettings.Save();
         }
     }
 
     public string? LastAction { get; private set; }
+
+    /// <summary>Kind of the focused field as of the last tick (see FocusedField.Guess).</summary>
+    public string? LastGuess { get; private set; }
 
     public FocusLanguageEnforcer()
     {
@@ -30,18 +43,28 @@ public sealed class FocusLanguageEnforcer
         _timer.Tick += (_, _) => Tick();
     }
 
-    public void StartIfEnabled() { if (Enabled) _timer.Start(); }
+    // The timer always runs (cheap, 400 ms): auto-fix needs to know when the
+    // caret is in an address bar even if auto-English is off.
+    public void StartIfEnabled() => _timer.Start();
 
     private void Tick()
     {
         var field = FocusInspector.Focused();
         if (field is null) return;
 
-        string sig = $"{field.ControlType}|{field.Name}|{field.IsPassword}";
+        string sig = $"{field.ControlType}|{field.Name}|{field.IsPassword}|{field.ClassName}|{field.AutomationId}";
         if (sig == _lastSignature) return;
         _lastSignature = sig;
 
-        if (!LatinKinds.Contains(field.Guess)) return;
+        // A new field means a new caret position for auto-fix.
+        App.AutoFix?.FocusMoved();
+
+        string kind = field.Guess;
+        LastGuess = kind;
+        bool wanted = kind == FocusedField.AddressBarKind
+            ? AddressBarEnabled
+            : Enabled && LatinKinds.Contains(kind);
+        if (!wanted) return;
 
         // Already on a Latin layout (English, French, Spanish…)? Leave it — only
         // a non-Latin script (Hebrew, Arabic, Cyrillic…) garbles these fields.
