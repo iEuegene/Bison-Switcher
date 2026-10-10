@@ -449,7 +449,7 @@
                                     <TextBlock Style="{StaticResource TileLabel}" Text="Словники"/>
                                     <TextBlock x:Name="OvDict" Style="{StaticResource Big}" Text="—" Margin="0,10,0,4"/>
                                     <TextBlock x:Name="OvDictSub" Foreground="{StaticResource MutedBrush}" Text="словоформ UA + EN" TextWrapping="Wrap"/>
-                                    <TextBlock Foreground="{StaticResource LimeBrush}" FontSize="12" Margin="0,16,0,0" Text="✓ Офлайн, без мережі"/>
+                                    <TextBlock Foreground="{StaticResource LimeBrush}" FontSize="12" Margin="0,16,0,0" Text="✓ Працюють офлайн"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -760,8 +760,33 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource H2}" Text="Оновлення" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="UpdateCurrentText" Style="{StaticResource RowDesc}" Margin="0,0,0,14"/>
+                            <Button x:Name="CheckUpdatesButton" Style="{StaticResource Primary}" Content="Перевірити оновлення" Click="CheckUpdates_Click"/>
+                            <TextBlock x:Name="UpdateStatus" Margin="0,12,0,0" FontWeight="SemiBold" TextWrapping="Wrap" Visibility="Collapsed"/>
+                            <WrapPanel x:Name="UpdateActions" Margin="0,10,0,0" Visibility="Collapsed">
+                                <Button Style="{StaticResource Ghost}" Content="Перейти на GitHub" Margin="0,0,10,0" Click="OpenRelease_Click"/>
+                                <Button x:Name="InstallUpdateButton" Style="{StaticResource Primary}" Content="Скачати та встановити" Click="InstallUpdate_Click"/>
+                            </WrapPanel>
+                            <Border Style="{StaticResource Divider}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Перевіряти автоматично"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Раз на день програма дивиться, чи є нова версія на GitHub, і повідомляє в треї. Нічого, крім цього запиту, в інтернет не надсилається."/>
+                                </StackPanel>
+                                <CheckBox x:Name="AutoUpdateCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="AutoUpdateCheck_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource H2}" Text="Приватність"/>
-                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"><Run Text="✓  " Foreground="#F0FC7E"/><Run Text="Без мережі: жодних запитів в інтернет, оновлення вимкнені."/></TextBlock>
+                            <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"><Run Text="✓  " Foreground="#F0FC7E"/><Run Text="Набраний текст нікуди не передається. Єдиний запит в інтернет — перевірка оновлень на GitHub, і її можна вимкнути."/></TextBlock>
                             <TextBlock TextWrapping="Wrap" Margin="0,0,0,8"><Run Text="✓  " Foreground="#F0FC7E"/><Run Text="Без журналу: у пам'яті лише поточне слово, на диск нічого не пишеться."/></TextBlock>
                             <TextBlock TextWrapping="Wrap"><Run Text="✓  " Foreground="#F0FC7E"/><Run Text="Поля паролів: перехоплення вимикається, поки курсор у такому полі."/></TextBlock>
                         </StackPanel>
@@ -774,6 +799,11 @@
                                 <Run Text="Створено для співробітників агенції performance-маркетингу "/>
                                 <Hyperlink NavigateUri="https://inweb.ua/ua/" Foreground="#F0FC7E"
                                            RequestNavigate="Hyperlink_RequestNavigate">inweb</Hyperlink><Run Text="."/>
+                            </TextBlock>
+                            <TextBlock Margin="0,8,0,0" TextWrapping="Wrap">
+                                <Run Text="Є пропозиція чи побажання? Пишіть: "/>
+                                <Hyperlink NavigateUri="mailto:y.buivol@inweb.ua?subject=Bison%20Switcher" Foreground="#F0FC7E"
+                                           RequestNavigate="Hyperlink_RequestNavigate">y.buivol@inweb.ua</Hyperlink>
                             </TextBlock>
                             <TextBlock Margin="0,8,0,0" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" FontSize="12">
                                 <Hyperlink NavigateUri="https://github.com/iEuegene/Bison-Switcher" Foreground="#F0FC7E"

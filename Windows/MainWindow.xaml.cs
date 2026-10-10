@@ -76,6 +76,9 @@ public partial class MainWindow : Window
         RefreshExcludedList();
         RefreshWordLists();
         StartupCheck.IsChecked = StartupManager.IsEnabled;
+        AutoUpdateCheck.IsChecked = AppSettings.Current.AutoCheckUpdates;
+        UpdateCurrentText.Text = $"Встановлена версія {UpdateService.Current.ToString(3)}.";
+        if (App.AvailableUpdate is { } pending) ShowUpdateAvailable(pending);
 
         DebugCheck.IsChecked = AppSettings.Current.DebugMode;
         ApplyDebugMode(AppSettings.Current.DebugMode);
@@ -142,7 +145,12 @@ public partial class MainWindow : Window
     // ---- Navigation ----
 
     /// <summary>0 = overview, 1 = settings (auto-fix page), kept for App's tray calls.</summary>
-    public void SelectTab(int index) => (index == 0 ? NavOverview : NavAutoFix).IsChecked = true;
+    public void SelectTab(int index) => (index switch
+    {
+        0 => NavOverview,
+        2 => NavSystem,   // updates live on the System page
+        _ => NavAutoFix,
+    }).IsChecked = true;
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
     {
@@ -466,6 +474,75 @@ public partial class MainWindow : Window
         _recording = false;
         RecordButton.Content = "Змінити…";
         HotkeyText.Text = App.Hotkey.DisplayString;
+    }
+
+    // ---- Updates ----
+
+    private ReleaseInfo? _release;
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        CheckUpdatesButton.Content = "Перевіряю…";
+        UpdateActions.Visibility = Visibility.Collapsed;
+        try
+        {
+            var r = await App.CheckForUpdatesAsync(notify: false);
+            if (r is null)
+                ShowUpdateStatus("Не вдалося зв'язатися з GitHub. Перевірте інтернет і спробуйте ще раз.", Orange);
+            else if (UpdateService.IsNewer(r))
+                ShowUpdateAvailable(r);
+            else
+                ShowUpdateStatus($"У вас остання версія BS ({UpdateService.Current.ToString(3)}).", Lime);
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = true;
+            CheckUpdatesButton.Content = "Перевірити оновлення";
+        }
+    }
+
+    private void ShowUpdateStatus(string text, System.Windows.Media.Brush color)
+    {
+        UpdateStatus.Text = text;
+        UpdateStatus.Foreground = color;
+        UpdateStatus.Visibility = Visibility.Visible;
+    }
+
+    private void ShowUpdateAvailable(ReleaseInfo r)
+    {
+        _release = r;
+        ShowUpdateStatus($"Доступна свіжа версія BS — {r.Version.ToString(3)}.", Lime);
+        UpdateActions.Visibility = Visibility.Visible;
+        InstallUpdateButton.IsEnabled = r.SetupUrl != null;
+    }
+
+    private void OpenRelease_Click(object sender, RoutedEventArgs e)
+        => UpdateService.OpenUrl(_release?.PageUrl ?? UpdateService.ReleasesPage);
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_release is null) return;
+        InstallUpdateButton.IsEnabled = false;
+        var progress = new Progress<int>(p => InstallUpdateButton.Content = $"Завантаження… {p}%");
+        string? error = await UpdateService.DownloadAndInstallAsync(_release, progress);
+        if (error is null)
+        {
+            InstallUpdateButton.Content = "Встановлюю…";
+            ShowUpdateStatus("Інсталятор запущено: програма закриється й відкриється вже оновленою.", Lime);
+        }
+        else
+        {
+            InstallUpdateButton.Content = "Скачати та встановити";
+            InstallUpdateButton.IsEnabled = true;
+            ShowUpdateStatus(error, Orange);
+        }
+    }
+
+    private void AutoUpdateCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.AutoCheckUpdates = AutoUpdateCheck.IsChecked == true;
+        AppSettings.Save();
     }
 
     // ---- Auto English ----

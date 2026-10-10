@@ -82,3 +82,16 @@ public class SentenceRulesTests
         => Assert.Equal(expected, SentenceRules.EndsSentence(word, last));
 }
 
+
+public class UpdateTagTests
+{
+    [Theory]
+    [InlineData("v1.4.0", "1.4.0")]
+    [InlineData("1.4", "1.4.0")]
+    [InlineData("v1.4.1-beta", "1.4.1")]
+    public void ParsesReleaseTags(string tag, string expected)
+    {
+        Assert.True(UpdateService.TryParseTag(tag, out var v));
+        Assert.Equal(System.Version.Parse(expected), v);
+    }
+}

@@ -33,6 +33,10 @@ public partial class App : Application
     public static PrivacyMonitor Privacy { get; private set; } = null!;
     public static AutoFixEngine AutoFix { get; private set; } = null!;
 
+    /// <summary>Newer release found by the last check, if any.</summary>
+    public static ReleaseInfo? AvailableUpdate { get; set; }
+    private System.Windows.Threading.DispatcherTimer? _updateTimer;
+
     private static System.Threading.Mutex? _singleInstance;
     private ToolStripMenuItem? _autoFixItem;
 
@@ -80,9 +84,52 @@ public partial class App : Application
         Privacy.SensitiveChanged += OnSensitiveChanged;
         Privacy.Start();
 
-        // This build is a personal fork: the upstream updater would replace it
-        // with the official release, so update checks are off.
+        // Upstream's NetSparkle updater stays off (it would install the official
+        // Kright). Bison Switcher checks its own GitHub releases instead.
         // SetupUpdater();
+        SetupUpdateChecks();
+    }
+
+    // ---- Update checks (GitHub Releases) ----
+
+    private void SetupUpdateChecks()
+    {
+        _updateTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _updateTimer.Tick += async (_, _) =>
+        {
+            _updateTimer.Interval = TimeSpan.FromHours(1);
+            var s = AppSettings.Current;
+            if (!s.AutoCheckUpdates) return;
+            if (s.LastUpdateCheckUtc is { } last && DateTime.UtcNow - last < TimeSpan.FromHours(24)) return;
+            await CheckForUpdatesAsync(notify: true);
+        };
+        _updateTimer.Start();
+    }
+
+    /// <summary>Checks GitHub; with <paramref name="notify"/> a newer version is
+    /// announced once in the tray. Returns the release, or null if the check failed.</summary>
+    public static async Task<ReleaseInfo?> CheckForUpdatesAsync(bool notify)
+    {
+        var r = await UpdateService.GetLatestAsync();
+        if (r is null) return null;
+        AppSettings.Current.LastUpdateCheckUtc = DateTime.UtcNow;
+        AvailableUpdate = UpdateService.IsNewer(r) ? r : null;
+        if (notify && AvailableUpdate is { } u && AppSettings.Current.LastNotifiedVersion != u.Tag)
+        {
+            AppSettings.Current.LastNotifiedVersion = u.Tag;
+            ((App)Current).ShowUpdateBalloon(u);
+        }
+        AppSettings.Save();
+        return r;
+    }
+
+    private void ShowUpdateBalloon(ReleaseInfo u)
+    {
+        if (_tray is null) return;
+        _tray.BalloonTipTitle = "Доступна нова версія Bison Switcher";
+        _tray.BalloonTipText = $"Версія {u.Version.ToString(3)} вже на GitHub. Натисніть, щоб оновити.";
+        _tray.BalloonTipIcon = ToolTipIcon.Info;
+        _tray.ShowBalloonTip(8000);
     }
 
     // ---- Auto-update (NetSparkle) ----
@@ -150,6 +197,7 @@ public partial class App : Application
             Text = "Bison Switcher",
             ContextMenuStrip = menu
         };
+        _tray.BalloonTipClicked += (_, _) => ShowWindow(tab: 2);
         _tray.MouseClick += (_, ev) =>
         {
             if (ev.Button == MouseButtons.Left) ToggleWindow();

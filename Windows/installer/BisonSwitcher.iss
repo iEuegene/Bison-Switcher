@@ -4,7 +4,7 @@
 ; Per-user install: no admin rights, no UAC prompt.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.2.0"
+  #define MyAppVersion "1.4.0"
 #endif
 #define MyAppName "Bison Switcher"
 #define MyAppExeName "BisonSwitcher.exe"
@@ -86,6 +86,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
+; Silent update started from the app: bring the app back afterwards.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
 
 [Code]
 const
@@ -99,6 +101,7 @@ var
 begin
   { Single-file exe is locked while it runs; close it quietly before copying/removing. }
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM BisonSwitcherPortable.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

@@ -56,11 +56,14 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp "/DMyAppVersion=$v" installer\BisonSwitcher.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Name the portable build
+        run: Copy-Item publish-ua\BisonSwitcher.exe publish-ua\BisonSwitcherPortable.exe
+
       - uses: actions/upload-artifact@v4
         with:
           name: BisonSwitcher
           path: |
-            Windows/publish-ua/BisonSwitcher.exe
+            Windows/publish-ua/BisonSwitcherPortable.exe
             Windows/installer/output/BisonSwitcherSetup.exe
 
       - name: GitHub Release
@@ -70,4 +73,4 @@ jobs:
           tag_name: ${{ github.event.release.tag_name || github.ref_name }}
           files: |
             Windows/installer/output/BisonSwitcherSetup.exe
-            Windows/publish-ua/BisonSwitcher.exe
+            Windows/publish-ua/BisonSwitcherPortable.exe

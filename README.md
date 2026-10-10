@@ -8,9 +8,13 @@
 
 Встановлюється за кілька секунд без прав адміністратора: ярлик у меню «Пуск», автозапуск з Windows, видалення через «Параметри → Програми».
 
-[Portable-версія BisonSwitcher.exe](https://github.com/iEuegene/Bison-Switcher/releases/latest/download/BisonSwitcher.exe) — один файл без встановлення.
+[Portable-версія BisonSwitcherPortable.exe](https://github.com/iEuegene/Bison-Switcher/releases/latest/download/BisonSwitcherPortable.exe) — один файл без встановлення.
 
 Windows може показати «Windows захистив ваш ПК»: файли не підписані платним сертифікатом. Натисніть **Докладніше → Виконати однаково**.
+
+Програма сама перевіряє оновлення раз на день (вимикається в налаштуваннях → Система) і оновлюється в один клік.
+
+Пропозиції та побажання: [y.buivol@inweb.ua](mailto:y.buivol@inweb.ua)
 
 ## Для розробки
 

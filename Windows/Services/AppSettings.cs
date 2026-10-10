@@ -46,6 +46,12 @@ public sealed class AppSettings
     /// <summary>Apps where auto-fix is off (the hotkey still works there).</summary>
     public List<ExcludedApp> AutoFixExcludedApps { get; set; } = ExcludedApp.Defaults();
 
+    /// <summary>Check GitHub for a newer release once a day.</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheckUtc { get; set; }
+    /// <summary>Last version the tray already announced, so it's announced once.</summary>
+    public string? LastNotifiedVersion { get; set; }
+
     /// <summary>Switch to English when the browser address bar gets focus.</summary>
     public bool AutoEnglishInAddressBar { get; set; } = true;
 
