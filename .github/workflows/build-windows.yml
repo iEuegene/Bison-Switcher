@@ -1,5 +1,6 @@
 # Builds BisonSwitcher.exe on every push to main (download from the run's
-# artifacts) and publishes a GitHub Release when a v* tag is pushed.
+# artifacts) and attaches it to a GitHub Release when one is published
+# (Releases → Draft a new release → tag vX.Y.Z → Publish) or a v* tag is pushed.
 name: Build Windows
 
 on:
@@ -7,6 +8,8 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -29,7 +32,7 @@ jobs:
       - name: Version
         id: ver
         run: |
-          $v = '${{ github.ref_name }}'
+          $v = '${{ github.event.release.tag_name || github.ref_name }}'
           if ($v -match '^v(\d+\.\d+\.\d+)$') { $v = $Matches[1] } else { $v = '' }
           "version=$v" >> $env:GITHUB_OUTPUT
 
@@ -50,8 +53,8 @@ jobs:
           path: Windows/publish-ua/BisonSwitcher.exe
 
       - name: GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
           files: Windows/publish-ua/BisonSwitcher.exe
-          generate_release_notes: true

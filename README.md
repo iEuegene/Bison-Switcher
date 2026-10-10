@@ -15,7 +15,7 @@
 
 - Код, збірка й опис функцій: [`Windows/README-UA.md`](Windows/README-UA.md)
 - Зібрати локально: `Windows\build-ua.cmd` (потрібен .NET 8 SDK)
-- Нова версія для колег: `git tag v1.2.1 && git push origin v1.2.1` — GitHub сам збере exe і опублікує Release.
+- Нова версія для колег: Releases → **Draft a new release** → тег `v1.2.1` → **Publish**. GitHub сам збере exe і прикріпить до релізу.
 
 Зроблено на основі [Kright](https://github.com/walteryaron/Kright) — Yaron Walter / Walter Technologies LTD, ліцензія MIT
 (див. [`LICENSE`](LICENSE)). Оригінальний README: [`README.Kright.md`](README.Kright.md).
