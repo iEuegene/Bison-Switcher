@@ -4,7 +4,7 @@ namespace Kright.Services;
 
 public record FocusedField(
     string ControlType, string Name, string HelpText, bool IsPassword, string Value,
-    string AutomationId = "", string ClassName = "")
+    string AutomationId = "", string ClassName = "", string RuntimeId = "")
 {
     public const string AddressBarKind = "Address bar";
 
@@ -65,9 +65,16 @@ public static class FocusInspector
                 IsPassword: info.IsPassword,
                 Value: value,
                 AutomationId: info.AutomationId ?? "",
-                ClassName: info.ClassName ?? "");
+                ClassName: info.ClassName ?? "",
+                RuntimeId: SafeRuntimeId(el));
         }
         catch { return null; }
+    }
+
+    private static string SafeRuntimeId(AutomationElement el)
+    {
+        try { return string.Join(".", el.GetRuntimeId()); }
+        catch { return ""; }
     }
 
     /// <summary>Try to set the focused element's value via UIA ValuePattern.

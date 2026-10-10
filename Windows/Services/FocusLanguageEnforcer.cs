@@ -52,7 +52,13 @@ public sealed class FocusLanguageEnforcer
         var field = FocusInspector.Focused();
         if (field is null) return;
 
-        string sig = $"{field.ControlType}|{field.Name}|{field.IsPassword}|{field.ClassName}|{field.AutomationId}";
+        // Identify the focused element, NOT its Name: editors like Notepad++
+        // (Scintilla) expose the document text as the accessible name, so a
+        // Name-based signature "changed" with every keystroke and reset the word
+        // auto-fix was collecting.
+        string sig = field.RuntimeId.Length > 0
+            ? $"{field.RuntimeId}|{field.IsPassword}"
+            : $"{field.ControlType}|{field.ClassName}|{field.AutomationId}|{field.IsPassword}";
         if (sig == _lastSignature) return;
         _lastSignature = sig;
 
