@@ -22,7 +22,10 @@ public static class UpdateService
     private const string ApiLatest = "https://api.github.com/repos/" + Repo + "/releases/latest";
     private const string SetupAsset = "BisonSwitcherSetup.exe";
 
-    private static readonly HttpClient Http = CreateClient();
+    // Lazy, and declared so nothing depends on static field order: the client's
+    // User-Agent reads Current, which a field initializer above it would see as null.
+    private static readonly Lazy<HttpClient> LazyHttp = new(CreateClient);
+    private static HttpClient Http => LazyHttp.Value;
 
     private static HttpClient CreateClient()
     {
@@ -32,7 +35,9 @@ public static class UpdateService
         return c;
     }
 
-    public static Version Current { get; } = Normalize(Assembly.GetExecutingAssembly().GetName().Version);
+    public static Version Current => CurrentVersion.Value;
+    private static readonly Lazy<Version> CurrentVersion =
+        new(() => Normalize(Assembly.GetExecutingAssembly().GetName().Version));
 
     /// <summary>Latest published release, or null if the check failed.</summary>
     public static async Task<ReleaseInfo?> GetLatestAsync()
