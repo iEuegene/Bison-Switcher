@@ -113,7 +113,7 @@ public partial class App : Application
         var r = await UpdateService.GetLatestAsync();
         if (r is null) return null;
         AppSettings.Current.LastUpdateCheckUtc = DateTime.UtcNow;
-        AvailableUpdate = UpdateService.IsNewer(r) ? r : null;
+        AvailableUpdate = UpdateService.IsNewer(r) && r.SetupUrl != null ? r : null;
         if (notify && AvailableUpdate is { } u && AppSettings.Current.LastNotifiedVersion != u.Tag)
         {
             AppSettings.Current.LastNotifiedVersion = u.Tag;

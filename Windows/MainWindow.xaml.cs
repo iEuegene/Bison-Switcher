@@ -528,6 +528,8 @@ public partial class MainWindow : Window
             var r = await App.CheckForUpdatesAsync(notify: false);
             if (r is null)
                 ShowUpdateStatus("Не вдалося зв'язатися з GitHub. Перевірте інтернет і спробуйте ще раз.", Orange);
+            else if (UpdateService.IsNewer(r) && r.SetupUrl is null)
+                ShowUpdateStatus($"Версія {r.Version.ToString(3)} ще збирається на GitHub. Спробуйте за кілька хвилин.", Orange);
             else if (UpdateService.IsNewer(r))
                 ShowUpdateAvailable(r);
             else

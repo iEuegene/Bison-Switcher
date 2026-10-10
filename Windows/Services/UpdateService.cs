@@ -47,6 +47,52 @@ public static class UpdateService
 
     /// <summary>Latest published release, or null if the check failed.</summary>
     public static async Task<ReleaseInfo?> GetLatestAsync()
+        => await GetLatestFromWebAsync().ConfigureAwait(false)
+           ?? await GetLatestFromApiAsync().ConfigureAwait(false);
+
+    // github.com/<repo>/releases/latest answers with a redirect to the release's tag
+    // page. Unlike api.github.com it has no 60-requests-per-hour cap per IP — which a
+    // whole office behind one address burns through quickly.
+    private static readonly Lazy<HttpClient> LazyWeb = new(() =>
+    {
+        var c = new HttpClient(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            ConnectCallback = ConnectPreferIPv4Async,
+        }) { Timeout = TimeSpan.FromSeconds(20) };
+        c.DefaultRequestHeaders.UserAgent.ParseAdd($"BisonSwitcher/{Current.ToString(3)}");
+        return c;
+    });
+
+    private static async Task<ReleaseInfo?> GetLatestFromWebAsync()
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Head, ReleasesPage);
+            using var resp = await LazyWeb.Value.SendAsync(req).ConfigureAwait(false);
+            var location = resp.Headers.Location;
+            if (location is null) return null;
+            if (!location.IsAbsoluteUri) location = new Uri(new Uri("https://github.com"), location);
+            const string marker = "/releases/tag/";
+            string path = location.AbsolutePath;
+            int i = path.IndexOf(marker, StringComparison.Ordinal);
+            if (i < 0) return null;
+            string tag = Uri.UnescapeDataString(path[(i + marker.Length)..]);
+            if (!TryParseTag(tag, out var version)) return null;
+
+            // The installer is attached by CI a few minutes after the release is
+            // published; until then there is nothing to install.
+            string setup = $"https://github.com/{Repo}/releases/download/{Uri.EscapeDataString(tag)}/{SetupAsset}";
+            using var head = new HttpRequestMessage(HttpMethod.Head, setup);
+            using var asset = await LazyWeb.Value.SendAsync(head).ConfigureAwait(false);
+            int code = (int)asset.StatusCode;
+            bool exists = code is >= 200 and < 400;
+            return new ReleaseInfo(version, tag, location.ToString(), exists ? setup : null);
+        }
+        catch { return null; }
+    }
+
+    private static async Task<ReleaseInfo?> GetLatestFromApiAsync()
     {
         try
         {
@@ -72,7 +118,7 @@ public static class UpdateService
     /// <summary>"v1.4.0" / "1.4" → 1.4.0. Pre-release suffixes are ignored.</summary>
     public static bool TryParseTag(string tag, out Version version)
     {
-        string t = tag.Trim().TrimStart('v', 'V');
+        string t = tag.Trim().TrimStart('v', 'V').TrimStart('.', ' ', '-', '_');   // tags like "v.1.5.1" happen
         int dash = t.IndexOfAny(new[] { '-', '+' });
         if (dash >= 0) t = t[..dash];
         if (Version.TryParse(t, out var v)) { version = Normalize(v); return true; }

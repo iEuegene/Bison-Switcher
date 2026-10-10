@@ -89,6 +89,7 @@ public class UpdateTagTests
     [InlineData("v1.4.0", "1.4.0")]
     [InlineData("1.4", "1.4.0")]
     [InlineData("v1.4.1-beta", "1.4.1")]
+    [InlineData("v.1.5.1", "1.5.1")]        // a real tag that once broke the check
     public void ParsesReleaseTags(string tag, string expected)
     {
         Assert.True(UpdateService.TryParseTag(tag, out var v));

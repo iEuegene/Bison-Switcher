@@ -4,7 +4,7 @@
 ; Per-user install: no admin rights, no UAC prompt.
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.5.1"
+  #define MyAppVersion "1.5.2"
 #endif
 #define MyAppName "Bison Switcher"
 #define MyAppExeName "BisonSwitcher.exe"
