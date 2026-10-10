@@ -57,7 +57,7 @@ public partial class MainWindow : Window
         ApplyDebugMode(AppSettings.Current.DebugMode);
 
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = $"Kright {v?.ToString(3) ?? "1.0.0"} · UA auto-fix fork";
+        VersionText.Text = $"Bison Switcher (BS) {v?.ToString(3) ?? "1.0.0"}";
 
         // Per-app keyboard section
         AppLangCheck.IsChecked = App.AppEnforcer.Enabled;

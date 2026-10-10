@@ -42,8 +42,10 @@ public partial class App : Application
 
         // One copy only: autostart + installer shortcut + a manual launch would
         // otherwise stack keyboard hooks and fix every word twice.
-        _singleInstance = new System.Threading.Mutex(true, @"Local\Kright.SingleInstance", out bool first);
+        _singleInstance = new System.Threading.Mutex(true, @"Local\BisonSwitcher.SingleInstance", out bool first);
         if (!first) { Shutdown(); return; }
+
+        StartupManager.MigrateLegacy();
 
         // Parse the dictionaries and bigram models off the UI thread now, so the
         // first word typed doesn't pay for it inside the keyboard hook.
@@ -121,7 +123,7 @@ public partial class App : Application
     private void OnSensitiveChanged(bool sensitive)
     {
         _tray.Icon = sensitive ? TrayIcons.Blind : TrayIcons.Normal;
-        _tray.Text = sensitive ? "Kright — поле пароля, не читаю" : "Kright";
+        _tray.Text = sensitive ? "Bison Switcher — поле пароля, не читаю" : "Bison Switcher";
     }
 
     // ---- Tray ----
@@ -139,13 +141,13 @@ public partial class App : Application
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Налаштування", null, (_, _) => ShowWindow(tab: 1));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Вийти з Kright", null, (_, _) => Shutdown());
+        menu.Items.Add("Вийти з Bison Switcher", null, (_, _) => Shutdown());
 
         _tray = new NotifyIcon
         {
             Icon = TrayIcons.Normal,
             Visible = true,
-            Text = "Kright",
+            Text = "Bison Switcher",
             ContextMenuStrip = menu
         };
         _tray.MouseClick += (_, ev) =>

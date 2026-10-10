@@ -1,15 +1,15 @@
-; Inno Setup script for Kright (Windows).
+; Inno Setup script for Bison Switcher (fork of Kright).
 ; Build with: ISCC.exe installer\kright.iss  (or run ..\build-installer.ps1)
 ; Produces a per-user installer (no admin / UAC needed), like Chrome / VS Code.
 
-#define MyAppName "Kright"
+#define MyAppName "Bison Switcher"
 #define MyAppVersion "1.2.0"
-#define MyAppPublisher "Walter Technologies LTD"
-#define MyAppExeName "Kright.exe"
+#define MyAppPublisher "iEuegene (based on Kright by Walter Technologies LTD)"
+#define MyAppExeName "BisonSwitcher.exe"
 
 [Setup]
 ; A unique, stable GUID identifies this app for upgrades/uninstall. Keep it.
-AppId={{6F3C2A41-9B7E-4D2A-9C1F-A1B2C3D4E5F6}
+AppId={{B1505A17-C4E2-4F7B-9A3D-2E8F6C1B5A90}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ; Stamp the version into the setup .exe's file metadata so NetSparkle's appcast
@@ -17,14 +17,14 @@ AppVersion={#MyAppVersion}
 VersionInfoVersion={#MyAppVersion}
 VersionInfoProductVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\{#MyAppName}
+DefaultDirName={localappdata}\Programs\BisonSwitcher
 DisableProgramGroupPage=yes
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Per-user install → no UAC prompt.
 PrivilegesRequired=lowest
 OutputDir=output
-OutputBaseFilename=KrightSetup-{#MyAppVersion}
+OutputBaseFilename=BisonSwitcherSetup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

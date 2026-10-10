@@ -4,7 +4,8 @@ using Kright.Native;
 
 namespace Kright.Services;
 
-/// <summary>JSON-backed settings in %APPDATA%\Kright\settings.json.</summary>
+/// <summary>JSON-backed settings in %APPDATA%\BisonSwitcher\settings.json
+/// (first run imports %APPDATA%\Kright\settings.json if present).</summary>
 public sealed class AppSettings
 {
     // Default hotkey: Ctrl+Alt+K (avoids clobbering single-modifier shortcuts).
@@ -50,7 +51,9 @@ public sealed class AppSettings
     public List<ContactLanguageRule> ContactLanguageRules { get; set; } = new();
 
     private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Kright");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BisonSwitcher");
+    private static readonly string LegacyFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Kright", "settings.json");
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
 
     private static AppSettings? _current;
@@ -62,6 +65,9 @@ public sealed class AppSettings
         {
             if (File.Exists(FilePath))
                 return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+            // First run after the rename: carry over the Kright settings (rules, hotkey…).
+            if (File.Exists(LegacyFilePath))
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(LegacyFilePath)) ?? new AppSettings();
         }
         catch { }
         return new AppSettings();

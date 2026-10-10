@@ -104,7 +104,7 @@ public sealed class AutoFixEngine : IDisposable
         })
         {
             IsBackground = true,
-            Name = "Kright auto-fix hooks",
+            Name = "Bison Switcher auto-fix hooks",
             Priority = ThreadPriority.AboveNormal,
         };
         _thread.Start();

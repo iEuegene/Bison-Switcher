@@ -1,7 +1,7 @@
 <Window x:Class="Kright.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Kright" Width="460" Height="640"
+        Title="Bison Switcher" Width="460" Height="640"
         Background="#0D0D0D" WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False">
     <Window.Resources>
@@ -196,14 +196,17 @@
 
                 <TextBlock x:Name="VersionText" Foreground="#CCC"/>
                 <TextBlock Margin="0,4,0,0" FontSize="11">
+                    <Hyperlink NavigateUri="https://github.com/iEuegene/Bison-Switcher"
+                               RequestNavigate="Hyperlink_RequestNavigate">Bison Switcher на GitHub</Hyperlink>
+                    <Run Text="   ·   на основі " Foreground="#888"/>
                     <Hyperlink NavigateUri="https://github.com/walteryaron/Kright"
-                               RequestNavigate="Hyperlink_RequestNavigate">Kright на GitHub</Hyperlink>
-                    <Run Text="   ·   оригінал: Yaron Walter, MIT" Foreground="#888"/>
+                               RequestNavigate="Hyperlink_RequestNavigate">Kright</Hyperlink>
+                    <Run Text=" (Yaron Walter, MIT)" Foreground="#888"/>
                 </TextBlock>
 
                 <Separator Margin="0,12"/>
 
-                <Button Content="Вийти з Kright" HorizontalAlignment="Left" Click="Quit_Click"/>
+                <Button Content="Вийти з Bison Switcher" HorizontalAlignment="Left" Click="Quit_Click"/>
             </StackPanel>
             </ScrollViewer>
         </TabItem>

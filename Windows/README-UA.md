@@ -1,6 +1,8 @@
-# Kright — форк з автовиправленням UA ↔ EN
+# Bison Switcher (BS)
 
-Форк [Kright](https://github.com/walteryaron/Kright) (MIT, Yaron Walter) для Windows.
+Автоперемикач і автовиправлення розкладки UA ↔ EN для Windows.
+
+Зроблено на основі [Kright](https://github.com/walteryaron/Kright) (MIT, Yaron Walter).
 Оригінал виправляє розкладку лише за хоткеєм; тут додано автоматику та решту функцій.
 
 ## Що додано
@@ -25,11 +27,11 @@
 ## Збірка
 
 1. Встановіть .NET 8 SDK: `winget install Microsoft.DotNet.SDK.8`
-2. Запустіть `build-ua.cmd`. Він прожене тести й збере один файл `publish-ua\Kright.exe`.
+2. Запустіть `build-ua.cmd`. Він прожене тести й збере один файл `publish-ua\BisonSwitcher.exe`.
 3. Перед першим запуском закрийте оригінальний Kright (трей → Quit) і видаліть його,
    щоб не працювали дві копії з одним хоткеєм.
 
-Налаштування спільні з оригіналом: `%APPDATA%\Kright\settings.json`.
+Налаштування: `%APPDATA%\BisonSwitcher\settings.json`. При першому запуску підтягуються налаштування Kright, якщо вони є.
 
 ## Перевірка якості детектора
 

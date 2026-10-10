@@ -9,7 +9,9 @@
     <!-- WinForms is used only for the tray NotifyIcon. -->
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AssemblyName>Kright</AssemblyName>
+    <AssemblyName>BisonSwitcher</AssemblyName>
+    <Product>Bison Switcher</Product>
+    <Description>Bison Switcher (BS) — UA/EN layout auto-fix, based on Kright by Yaron Walter (MIT)</Description>
     <RootNamespace>Kright</RootNamespace>
     <Version>1.2.0</Version>
   </PropertyGroup>

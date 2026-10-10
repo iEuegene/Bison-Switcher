@@ -23,6 +23,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+rem Earlier builds produced Kright.exe; drop it so two copies never run.
+if exist publish-ua\Kright.exe del /q publish-ua\Kright.exe
 echo.
-echo Done: %~dp0publish-ua\Kright.exe
+echo Done: %~dp0publish-ua\BisonSwitcher.exe
 pause

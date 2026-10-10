@@ -18,7 +18,7 @@ public sealed class HotkeyManager : IDisposable
     public HotkeyManager()
     {
         // Message-only window (HWND_MESSAGE = -3).
-        var p = new HwndSourceParameters("KrightHotkey")
+        var p = new HwndSourceParameters("BisonSwitcherHotkey")
         {
             ParentWindow = new IntPtr(-3),
             WindowStyle = 0

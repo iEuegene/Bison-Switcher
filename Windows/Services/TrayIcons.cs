@@ -42,10 +42,24 @@ public static class TrayIcons
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
             if (blind) DrawBlindEye(g, S, color);
-            else DrawKeyboard(g, S, color);
+            else DrawMonogram(g, S, color);
         }
 
         return ToIcon(bmp);
+    }
+
+    /// <summary>"BS" monogram (Bison Switcher) in a rounded frame.</summary>
+    private static void DrawMonogram(Graphics g, int S, Color color)
+    {
+        using var pen = new Pen(color, 2.0f) { LineJoin = LineJoin.Round };
+        using (var frame = RoundedRect(1.5f, 4.5f, S - 3f, S - 9f, 5f))
+            g.DrawPath(pen, frame);
+
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        using var font = new Font("Segoe UI", 13f, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(color);
+        using var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString("BS", font, brush, new RectangleF(0, 0, S, S + 1), fmt);
     }
 
     /// <summary>Keyboard glyph (mirrors the macOS "keyboard" symbol): a rounded
