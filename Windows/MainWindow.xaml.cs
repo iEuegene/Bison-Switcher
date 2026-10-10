@@ -63,6 +63,8 @@ public partial class MainWindow : Window
 
         UndoCheck.IsChecked = AppSettings.Current.AutoFixUndoOnBackspace;
         CapitalizeCheck.IsChecked = AppSettings.Current.AutoCapitalize;
+        SpellCheck.IsChecked = AppSettings.Current.SpellCheckEnabled;
+        RefreshSpellStatus();
         LearnCheck.IsChecked = AppSettings.Current.AutoFixLearnFromUndo && AppSettings.Current.AutoFixLearnFromHotkey;
         (AppSettings.Current.AutoFixSensitivity switch { 0 => SensCareful, 2 => SensBold, _ => SensNormal }).IsChecked = true;
         SyncAutoFixToggles();
@@ -238,6 +240,36 @@ public partial class MainWindow : Window
     private void SideToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(SideToggle.IsChecked == true);
     private void OvToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(OvToggle.IsChecked == true);
 
+    private void SpellCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = SpellCheck.IsChecked == true;
+        AppSettings.Current.SpellCheckEnabled = on;
+        AppSettings.Save();
+        if (on) App.AutoFix.RequestSpellWarmup();
+        RefreshSpellStatus();
+    }
+
+    /// <summary>Which Windows spell-check dictionaries are installed.</summary>
+    private void RefreshSpellStatus()
+    {
+        bool uk, en;
+        try
+        {
+            var probe = new SpellService();
+            uk = probe.IsAvailable("uk");
+            en = probe.IsAvailable("en");
+        }
+        catch { uk = en = false; }
+
+        string Mark(bool ok) => ok ? "доступна" : "не встановлена";
+        SpellStatus.Text = $"Перевірка правопису Windows — українська: {Mark(uk)} · англійська: {Mark(en)}";
+        SpellStatus.Foreground = uk && en ? Lime : Orange;
+        SpellHelp.Visibility = uk && en ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OpenLanguageSettings_Click(object sender, RoutedEventArgs e)
+        => UpdateService.OpenUrl("ms-settings:regionlanguage");
+
     private void CapitalizeCheck_Click(object sender, RoutedEventArgs e)
     {
         AppSettings.Current.AutoCapitalize = CapitalizeCheck.IsChecked == true;
@@ -369,6 +401,12 @@ public partial class MainWindow : Window
                 DiagVerdict.Text = "Не перевіряється";
                 DiagVerdict.Foreground = Muted;
                 DiagReason.Text = "Ця програма у виключеннях (сторінка «Програми»).";
+                return;
+            case "spell":
+                DiagWord.Text = $"{w.Typed} → {w.Alt}";
+                DiagVerdict.Text = $"Виправлено описку: «{w.Alt}»";
+                DiagVerdict.Foreground = Lime;
+                DiagReason.Text = "Перевірка правопису Windows: слово відрізнялося від правильного на одну літеру.";
                 return;
             case "elevated":
                 DiagWord.Text = w.Typed;

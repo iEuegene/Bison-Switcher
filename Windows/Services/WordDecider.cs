@@ -210,3 +210,75 @@ public static class SentenceRules
         return !Abbreviations.Contains(key);
     }
 }
+
+/// <summary>Which spelling corrections are safe to apply without asking.
+/// Conservative on purpose: a wrong "correction" is worse than a typo left alone.</summary>
+public static class SpellRules
+{
+    public static string? PickCorrection(string word, SpellVerdict v, string lang,
+                                         IWordRanks ranks, IReadOnlySet<string> never)
+    {
+        if (!v.Misspelled) return null;
+        if (word.Length < 3 || !char.IsLetter(word[0])) return null;
+        foreach (var c in word)
+            if (!char.IsLetter(c) && !WordDecider.IsInnerMark(c)) return null;
+
+        string key = WordDecider.Normalize(word);
+        if (never.Contains(key)) return null;
+
+        // Same case-shape guards as the layout fix: ABBR, iPhone.
+        var letters = word.Where(char.IsLetter).ToList();
+        if (letters.Count >= 2 && letters.All(char.IsUpper)) return null;
+        if (letters.Skip(1).Any(char.IsUpper)) return null;
+
+        // Our frequency list knows it (a name, a rare form, slang Windows lacks): leave it.
+        if (ranks.Rank(lang, key) > 0) return null;
+
+        string? cand = v.Action switch
+        {
+            SpellService.ActionReplace => v.Replacement,
+            SpellService.ActionSuggest when v.Suggestions.Count > 0 => v.Suggestions[0],
+            _ => null,
+        };
+        if (string.IsNullOrEmpty(cand) || cand.Contains(' ')) return null;
+
+        int dist = Distance(key, WordDecider.Normalize(cand));
+        if (v.Action == SpellService.ActionReplace)
+        {
+            if (dist > 2) return null;   // Windows' own autocorrect pairs ("teh" → "the")
+        }
+        else
+        {
+            // A suggestion is only taken when it is one keystroke away AND a real,
+            // known word — a slip, not a different word.
+            if (dist != 1) return null;
+            if (ranks.Rank(lang, WordDecider.Normalize(cand)) == 0) return null;
+        }
+        return MatchCase(word, cand);
+    }
+
+    /// <summary>Damerau–Levenshtein (optimal string alignment): a swap of two
+    /// neighbouring letters counts as one edit ("пирвіт" → "привіт").</summary>
+    public static int Distance(string a, string b)
+    {
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+        for (int j = 0; j <= b.Length; j++) d[0, j] = j;
+        for (int i = 1; i <= a.Length; i++)
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1])
+                    d[i, j] = Math.Min(d[i, j], d[i - 2, j - 2] + 1);
+            }
+        return d[a.Length, b.Length];
+    }
+
+    private static string MatchCase(string original, string cand)
+    {
+        if (original.Length > 0 && char.IsUpper(original[0]) && cand.Length > 0)
+            return char.ToUpperInvariant(cand[0]) + cand[1..];
+        return cand;
+    }
+}

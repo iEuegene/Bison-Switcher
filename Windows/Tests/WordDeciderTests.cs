@@ -95,3 +95,35 @@ public class UpdateTagTests
         Assert.Equal(System.Version.Parse(expected), v);
     }
 }
+
+public class SpellRulesTests
+{
+    private static readonly HashSet<string> None = new();
+    private static SpellVerdict Suggest(params string[] s) => new(true, SpellService.ActionSuggest, null, s);
+
+    [Theory]
+    [InlineData("пирвіт", "привіт")]   // swapped letters
+    [InlineData("Пирвіт", "Привіт")]   // keeps the capital
+    [InlineData("wrod", "word")]       // "helo" is in our EN list, so it's left alone by design
+    public void FixesOneKeystrokeSlips(string word, string fix)
+    {
+        string lang = char.IsAscii(word[0]) ? "en" : "uk";
+        Assert.Equal(fix, SpellRules.PickCorrection(word, Suggest(fix.ToLowerInvariant()), lang, WordRanks.Embedded, None));
+    }
+
+    [Fact]
+    public void LeavesFarSuggestions() =>
+        Assert.Null(SpellRules.PickCorrection("првт", Suggest("привіт"), "uk", WordRanks.Embedded, None));
+
+    [Fact]
+    public void LeavesWordsOurDictionaryKnows() =>
+        Assert.Null(SpellRules.PickCorrection("тестую", Suggest("тестуй"), "uk", WordRanks.Embedded, None));
+
+    [Fact]
+    public void LeavesAbbreviations() =>
+        Assert.Null(SpellRules.PickCorrection("SEOO", Suggest("SEO"), "en", WordRanks.Embedded, None));
+
+    [Fact]
+    public void Distance_CountsSwapAsOne() => Assert.Equal(1, SpellRules.Distance("пирвіт", "привіт"));
+}
+

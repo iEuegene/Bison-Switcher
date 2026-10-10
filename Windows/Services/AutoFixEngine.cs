@@ -48,6 +48,9 @@ public sealed class AutoFixEngine : IDisposable
     private char _lastChar;     // last printable character typed (current layout)
     private bool _capPending;   // next letter starts a sentence → make it upper-case
     private string? _lastInserted; // text the last fix typed, if any
+    private SpellService? _spell;  // created and used on the hook thread only
+    private int _spellSlow;        // checks over budget; 3 of them suspend spelling for the session
+    private const uint WM_APP_WARM_SPELL = 0x8001;
     private LastFix? _last;
 
     private static readonly uint OwnPid = (uint)Environment.ProcessId;
@@ -105,9 +108,12 @@ public sealed class AutoFixEngine : IDisposable
             _mouseHook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _mouseProc, mod, 0);
             ready.Set();
 
+            if (AppSettings.Current.SpellCheckEnabled) WarmSpell();
+
             // LL hooks are delivered through this thread's message loop.
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
             {
+                if (msg.message == WM_APP_WARM_SPELL) { WarmSpell(); continue; }
                 NativeMethods.TranslateMessage(ref msg);
                 NativeMethods.DispatchMessage(ref msg);
             }
@@ -134,6 +140,28 @@ public sealed class AutoFixEngine : IDisposable
     }
 
     public void Dispose() => Stop();
+
+    /// <summary>Spell check was just switched on: load dictionaries on the hook
+    /// thread now, so the first word doesn't wait ~100 ms for them.</summary>
+    public void RequestSpellWarmup()
+    {
+        if (_threadId != 0)
+            NativeMethods.PostThreadMessage(_threadId, WM_APP_WARM_SPELL, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    private void WarmSpell()
+    {
+        try
+        {
+            lock (_gate)
+            {
+                _spell ??= new SpellService();
+                _spell.Warm("uk", "en");
+                _spellSlow = 0;
+            }
+        }
+        catch { }
+    }
 
     /// <summary>Forget the current word (start clean).</summary>
     public void Reset()
@@ -383,6 +411,13 @@ public sealed class AutoFixEngine : IDisposable
         try { fixedIt = AppSettings.Current.AutoFixEnabled && TryFix(boundaryVk); }
         catch { fixedIt = false; }
 
+        // Right layout, wrong letters: the Windows spell checker gets a say.
+        if (!fixedIt && shown != null && AppSettings.Current.SpellCheckEnabled)
+        {
+            try { fixedIt = TrySpell(boundaryVk, shown); }
+            catch { fixedIt = false; }
+        }
+
         if (fixedIt && _lastInserted is { Length: > 0 } ins)
         {
             shown = ins;
@@ -476,6 +511,47 @@ public sealed class AutoFixEngine : IDisposable
         _last = boundaryVk == NativeMethods.VK_SPACE
             ? new LastFix(removed, inserted, cur, WordDecider.Normalize(typed))
             : null; // after Tab/Enter the caret has left the word — no undo
+        return true;
+    }
+
+    private bool TrySpell(ushort boundaryVk, string shown)
+    {
+        if (_spellSlow >= 3) return false;
+        if (BlockReason() != null) return false;
+
+        int end = shown.Length;
+        while (end > 0 && !char.IsLetter(shown[end - 1])) end--;
+        string core = shown[..end], tail = shown[end..];
+        if (core.Length < 3) return false;
+
+        IntPtr cur = LanguageManager.CurrentHkl();
+        string lang = LangOf(cur);
+        _spell ??= new SpellService();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var verdict = _spell.Check(core, lang);
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > 120 && ++_spellSlow >= 3)
+            LastDecision = "spell check too slow — paused until restart";
+        if (verdict is null) return false;
+
+        string? fix = SpellRules.PickCorrection(core, verdict, lang, WordRanks.Embedded, _lists.Never);
+        if (fix is null || fix == core) return false;
+
+        string inserted = fix + tail;
+        bool addressBar = App.Enforcer?.LastGuess == FocusedField.AddressBarKind;
+        if (!KeystrokeReplacer.SendReplacement(shown.Length, inserted, boundaryVk, deleteFirst: addressBar))
+            return false;
+
+        Interlocked.Increment(ref _fixCount);
+        LastFixText = $"{shown} → {inserted}";
+        LastDecision = $"{core} → {fix}: SPELL";
+        LastWord = new WordInfo(core, fix, true, "spell");
+        _lastInserted = inserted;
+        _prev = null;
+        _last = boundaryVk == NativeMethods.VK_SPACE
+            ? new LastFix(shown, inserted, cur, WordDecider.Normalize(core))
+            : null;
         return true;
     }
 

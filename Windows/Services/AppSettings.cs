@@ -36,6 +36,8 @@ public sealed class AppSettings
     /// <summary>0 = careful, 1 = normal, 2 = bold. Only affects words that are
     /// in neither dictionary (dictionary hits are decided the same way).</summary>
     public int AutoFixSensitivity { get; set; } = 1;
+    /// <summary>Fix typos with the Windows spell checker (off by default).</summary>
+    public bool SpellCheckEnabled { get; set; } = false;
     /// <summary>Capital letter for the first word after ". ", "! ", "? ".</summary>
     public bool AutoCapitalize { get; set; } = true;
     /// <summary>Words (as typed, lower-case) auto-fix must leave alone.</summary>

@@ -553,6 +553,28 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource H2}" Text="Виправлення помилок" Margin="0,0,0,4"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Використовує перевірку правопису Windows: «пирвіт» → «привіт», «teh» → «the». Виправляє лише очевидні описки — одна зайва, пропущена чи переставлена літера — і лише якщо правильне слово є у словнику. Імена й рідкісні слова не чіпає. Backspace одразу після заміни скасовує її."/>
+                                </StackPanel>
+                                <CheckBox x:Name="SpellCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="SpellCheck_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="SpellStatus" Margin="0,12,0,0" FontSize="12" TextWrapping="Wrap"/>
+                            <StackPanel x:Name="SpellHelp" Visibility="Collapsed" Margin="0,8,0,0">
+                                <TextBlock Style="{StaticResource RowDesc}" Margin="0"
+                                           Text="Щоб увімкнути словник: Параметри Windows → Час і мова → Мова та регіон → Додати мову → Українська (або English). Достатньо компонента «Базове введення». Після встановлення перезапустіть Bison Switcher."/>
+                                <Button Style="{StaticResource Ghost}" Content="Відкрити параметри мови" Margin="0,10,0,0" Click="OpenLanguageSettings_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource H2}" Text="Слова поза словником"/>
                             <TextBlock Style="{StaticResource RowDesc}" Margin="0,0,0,14"
                                        Text="Слова зі словника (≈280 тис. форм UA, ≈190 тис. EN) виправляються однаково на будь-якому рівні. Рівень впливає лише на рідкісні слова, яких словник не знає."/>
