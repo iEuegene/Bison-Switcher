@@ -41,11 +41,37 @@ public static class TrayIcons
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
-            if (blind) DrawBlindEye(g, S, color);
-            else DrawMonogram(g, S, color);
+            DrawBrandMark(g, S, blind);
         }
 
         return ToIcon(bmp);
+    }
+
+    /// <summary>Brand mark: the Inweb parallelogram stroke with "BS". Lime normally,
+    /// orange with a slash while a password field has focus (blind mode). Both
+    /// read on light and dark taskbars, so no theme switch is needed.</summary>
+    private static void DrawBrandMark(Graphics g, int S, bool blind)
+    {
+        var fill = blind ? Color.FromArgb(0xEF, 0x58, 0x3D) : Color.FromArgb(0xF0, 0xFC, 0x7E);
+        var ink = Color.FromArgb(0x00, 0x3B, 0x29);
+        var shape = new[]
+        {
+            new PointF(8f, 3f), new PointF(S - 0.5f, 3f),
+            new PointF(S - 8f, S - 3f), new PointF(0.5f, S - 3f),
+        };
+        using (var b = new SolidBrush(fill)) g.FillPolygon(b, shape);
+
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        using var font = new Font("Segoe UI", 13.5f, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(ink);
+        using var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        g.DrawString("BS", font, brush, new RectangleF(0, 0, S, S + 1), fmt);
+
+        if (blind)
+        {
+            using var slash = new Pen(ink, 2.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(slash, 6f, S - 6f, S - 6f, 6f);
+        }
     }
 
     /// <summary>"BS" monogram (Bison Switcher) in a rounded frame.</summary>

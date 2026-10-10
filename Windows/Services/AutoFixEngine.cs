@@ -55,6 +55,13 @@ public sealed class AutoFixEngine : IDisposable
     /// <summary>Last decision, for the Detect tab (word → result · reason).</summary>
     public string? LastDecision { get; private set; }
 
+    /// <summary>Counters for this run only (never persisted).</summary>
+    public int FixCount => _fixCount;
+    public int UndoCount => _undoCount;
+    /// <summary>Last applied fix as "typed → fixed", for the overview.</summary>
+    public string? LastFixText { get; private set; }
+    private int _fixCount, _undoCount;
+
     /// <summary>Raised on the UI thread.</summary>
     public event Action? StateChanged;
 
@@ -371,6 +378,8 @@ public sealed class AutoFixEngine : IDisposable
             return false;
 
         LanguageManager.Switch(other.Hkl);
+        Interlocked.Increment(ref _fixCount);
+        LastFixText = $"{removed} → {inserted}";
 
         _prev = null;
         _last = boundaryVk == NativeMethods.VK_SPACE
@@ -387,6 +396,8 @@ public sealed class AutoFixEngine : IDisposable
         KeystrokeReplacer.SendReplacement(f.Inserted.Length + 1, f.Removed, NativeMethods.VK_SPACE);
         LanguageManager.Switch(f.FromHkl);
         LastDecision = $"undo: {f.Inserted} → {f.Removed}";
+        Interlocked.Increment(ref _undoCount);
+        LastFixText = $"скасовано: {f.Inserted} → {f.Removed}";
         _word.Clear();
         _dirty = false;
         _prev = null;

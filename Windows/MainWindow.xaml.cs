@@ -1,9 +1,10 @@
 using System.ComponentModel;
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -12,8 +13,9 @@ using Kright.Services;
 using InputLanguage = Kright.Services.InputLanguage;
 using Color = System.Windows.Media.Color;
 using Brushes = System.Windows.Media.Brushes;
-using ComboBox = System.Windows.Controls.ComboBox;
 using Button = System.Windows.Controls.Button;
+using RadioButton = System.Windows.Controls.RadioButton;
+using Orientation = System.Windows.Controls.Orientation;
 
 namespace Kright;
 
@@ -21,34 +23,55 @@ public partial class MainWindow : Window
 {
     private readonly DispatcherTimer _timer;
     private bool _recording;
+    private bool _loading = true;
     private LayoutSuggestion? _suggestion;
-    private DispatcherTimer? _statusTimer;
+    private DispatcherTimer? _statusTimer, _contactStatusTimer, _excludeStatusTimer;
+    private readonly Dictionary<RadioButton, FrameworkElement> _pages;
+
+    private static readonly SolidColorBrush Lime = new(Color.FromRgb(0xF0, 0xFC, 0x7E));
+    private static readonly SolidColorBrush Orange = new(Color.FromRgb(0xEF, 0x58, 0x3D));
+    private static readonly SolidColorBrush Muted = new(Color.FromRgb(0x94, 0xAD, 0xA3));
+    private static readonly SolidColorBrush Faint = new(Color.FromRgb(0x5E, 0x7D, 0x71));
+    private static readonly SolidColorBrush TextWhite = new(Color.FromRgb(0xF7, 0xF7, 0xF7));
+    private static readonly SolidColorBrush ChipBg = new(Color.FromRgb(0x0B, 0x2A, 0x20));
+    private static readonly SolidColorBrush ChipLine = new(Color.FromRgb(0x2E, 0x5E, 0x4C));
 
     public MainWindow()
     {
         InitializeComponent();
+
+        _pages = new Dictionary<RadioButton, FrameworkElement>
+        {
+            [NavOverview] = PageOverview,
+            [NavAutoFix] = PageAutoFix,
+            [NavDict] = PageDict,
+            [NavApps] = PageApps,
+            [NavLayout] = PageLayout,
+            [NavSystem] = PageSystem,
+            [NavDetect] = PageDetect,
+        };
+
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
-        _timer.Tick += (_, _) => RefreshDetect();
-        IsVisibleChanged += (_, _) => { if (IsVisible) _timer.Start(); else _timer.Stop(); };
+        _timer.Tick += (_, _) => RefreshLive();
+        IsVisibleChanged += (_, _) => { if (IsVisible) { RefreshLive(); _timer.Start(); } else _timer.Stop(); };
+
+        try { Icon = ToImageSource(TrayIcons.Normal); } catch { }
 
         HotkeyText.Text = App.Hotkey.DisplayString;
         AutoLangCheck.IsChecked = App.Enforcer.Enabled;
         AddressBarCheck.IsChecked = App.Enforcer.AddressBarEnabled;
 
-        // Auto-fix section
-        AutoFixCheck.IsChecked = App.AutoFix.Enabled;
         UndoCheck.IsChecked = AppSettings.Current.AutoFixUndoOnBackspace;
         LearnCheck.IsChecked = AppSettings.Current.AutoFixLearnFromUndo && AppSettings.Current.AutoFixLearnFromHotkey;
-        SensitivityCombo.SelectedIndex = Math.Clamp(AppSettings.Current.AutoFixSensitivity, 0, 2);
+        (AppSettings.Current.AutoFixSensitivity switch { 0 => SensCareful, 2 => SensBold, _ => SensNormal }).IsChecked = true;
+        SyncAutoFixToggles();
         App.AutoFix.StateChanged += () =>
         {
             if (!IsVisible) return; // refreshed on activation instead
-            Dispatcher.InvokeAsync(() =>
-            {
-                AutoFixCheck.IsChecked = App.AutoFix.Enabled;
-                RefreshWordLists();
-            });
+            SyncAutoFixToggles();
+            RefreshWordLists();
         };
+
         RefreshExcludedList();
         RefreshWordLists();
         StartupCheck.IsChecked = StartupManager.IsEnabled;
@@ -59,22 +82,43 @@ public partial class MainWindow : Window
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"Bison Switcher (BS) {v?.ToString(3) ?? "1.0.0"}";
 
-        // Per-app keyboard section
         AppLangCheck.IsChecked = App.AppEnforcer.Enabled;
-        foreach (var lang in LanguageManager.Enabled())
-            AddLayoutCombo.Items.Add(new ComboBoxItem { Content = lang.Name, Tag = lang });
-        if (AddLayoutCombo.Items.Count > 0) AddLayoutCombo.SelectedIndex = 0;
+        FillLayoutChips(AddLayoutChips, "addApp");
         RefreshRulesList();
 
-        // Per-contact keyboard section
         ContactLangCheck.IsChecked = App.ContactEnforcer.Enabled;
-        foreach (var lang in LanguageManager.Enabled())
-            ContactLayoutCombo.Items.Add(new ComboBoxItem { Content = lang.Name, Tag = lang });
-        if (ContactLayoutCombo.Items.Count > 0) ContactLayoutCombo.SelectedIndex = 0;
+        FillLayoutChips(ContactLayoutChips, "addContact");
         RefreshContactRulesList();
 
         RefreshLayoutMap();
+        _loading = false;
     }
+
+    // ---- Window chrome: brand-green title bar on Windows 11 ----
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            int dark = 1;
+            DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int));        // immersive dark mode
+            int caption = 0x00171F07;                                      // COLORREF of #071F17 (0x00BBGGRR)
+            DwmSetWindowAttribute(hwnd, 35, ref caption, sizeof(int));     // caption colour (Win11)
+            int text = 0x00F7F7F7;
+            DwmSetWindowAttribute(hwnd, 36, ref text, sizeof(int));        // caption text colour
+            int border = 0x003B4A1F;                                       // #1F4A3B as BGR
+            DwmSetWindowAttribute(hwnd, 34, ref border, sizeof(int));      // border colour
+        }
+        catch { /* older Windows: default chrome */ }
+    }
+
+    private static ImageSource ToImageSource(System.Drawing.Icon icon) =>
+        Imaging.CreateBitmapSourceFromHIcon(icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
 
     protected override void OnActivated(EventArgs e)
     {
@@ -82,21 +126,9 @@ public partial class MainWindow : Window
         UpdateAddButtonLabel();
         UpdateAddContactButtonLabel();
         UpdateExcludeButtonLabel();
-        AutoFixCheck.IsChecked = App.AutoFix.Enabled;
+        SyncAutoFixToggles();
         RefreshWordLists();
-    }
-
-    public void SelectTab(int index)
-    {
-        // Detect (index 0) may be hidden — fall back to Settings.
-        if (index == 0 && DetectTab.Visibility != Visibility.Visible) index = 1;
-        Tabs.SelectedIndex = index;
-    }
-
-    private void ApplyDebugMode(bool on)
-    {
-        DetectTab.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        if (!on && ReferenceEquals(Tabs.SelectedItem, DetectTab)) Tabs.SelectedIndex = 1; // Settings
+        RefreshLive();
     }
 
     // Keep the app alive (tray) when the window is closed.
@@ -106,7 +138,118 @@ public partial class MainWindow : Window
         Hide();
     }
 
-    // ---- Detect tab ----
+    // ---- Navigation ----
+
+    /// <summary>0 = overview, 1 = settings (auto-fix page), kept for App's tray calls.</summary>
+    public void SelectTab(int index) => (index == 0 ? NavOverview : NavAutoFix).IsChecked = true;
+
+    private void Nav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_pages is null || sender is not RadioButton rb) return;
+        foreach (var (nav, page) in _pages)
+            page.Visibility = nav == rb ? Visibility.Visible : Visibility.Collapsed;
+        RefreshLive();
+    }
+
+    private void GoTo_Click(object sender, RoutedEventArgs e)
+    {
+        string? tag = (sender as FrameworkElement)?.Tag as string;
+        var target = tag switch
+        {
+            "apps" => NavApps,
+            "dict" => NavDict,
+            _ => NavOverview,
+        };
+        target.IsChecked = true;
+    }
+
+    private void ApplyDebugMode(bool on)
+    {
+        NavDetect.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (!on && NavDetect.IsChecked == true) NavSystem.IsChecked = true;
+    }
+
+    // ---- Live data (overview + diagnostics) ----
+
+    private void RefreshLive()
+    {
+        if (!IsVisible) return;
+        RefreshOverview();
+        if (PageDetect.Visibility == Visibility.Visible) RefreshDetect();
+    }
+
+    private void RefreshOverview()
+    {
+        var fx = App.AutoFix;
+        bool on = fx.Enabled;
+        OvHeadline.Text = on ? "Розкладка під контролем." : "Автовиправлення на паузі.";
+        OvSub.Text = on
+            ? "Пишіть як звикли — промахи розкладки виправляються на пробілі."
+            : "Увімкніть перемикач, щоб слова, набрані не в тій розкладці, знову виправлялися.";
+        OvAutoState.Text = on ? "Увімк." : "Пауза";
+        OvAutoState.Foreground = on ? TextWhite : Orange;
+
+        OvFixed.Text = fx.FixCount.ToString("N0");
+        OvFixedSub.Text = fx.UndoCount > 0
+            ? $"слів за цей запуск · скасовано {fx.UndoCount}"
+            : "слів за цей запуск";
+        OvLast.Text = fx.LastFixText is { } last ? "Останнє: " + last : " ";
+
+        int uk = WordRanks.Embedded.Count("uk"), en = WordRanks.Embedded.Count("en");
+        OvDict.Text = $"{(uk + en) / 1000:N0} тис.";
+        OvDictSub.Text = $"словоформ · UA {uk / 1000:N0} тис. · EN {en / 1000:N0} тис.";
+
+        OvExcluded.Text = AppSettings.Current.AutoFixExcludedApps.Count.ToString();
+        int never = AppSettings.Current.NeverConvert.Count, always = AppSettings.Current.AlwaysConvert.Count;
+        OvWords.Text = (never + always).ToString();
+        OvWordsSub.Text = $"ніколи: {never} · завжди: {always}";
+    }
+
+    // ---- Auto-fix toggles (sidebar, overview card, settings page) ----
+
+    private void SyncAutoFixToggles()
+    {
+        bool on = App.AutoFix.Enabled;
+        AutoFixCheck.IsChecked = on;
+        SideToggle.IsChecked = on;
+        OvToggle.IsChecked = on;
+        SideState.Text = on ? "Увімкнено" : "Пауза";
+        SideState.Foreground = on ? Muted : Orange;
+    }
+
+    private void SetAutoFix(bool on)
+    {
+        App.AutoFix.Enabled = on;
+        SyncAutoFixToggles();
+        RefreshOverview();
+    }
+
+    private void AutoFixCheck_Click(object sender, RoutedEventArgs e) => SetAutoFix(AutoFixCheck.IsChecked == true);
+    private void SideToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(SideToggle.IsChecked == true);
+    private void OvToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(OvToggle.IsChecked == true);
+
+    private void UndoCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.AutoFixUndoOnBackspace = UndoCheck.IsChecked == true;
+        AppSettings.Save();
+    }
+
+    private void LearnCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = LearnCheck.IsChecked == true;
+        AppSettings.Current.AutoFixLearnFromUndo = on;
+        AppSettings.Current.AutoFixLearnFromHotkey = on;
+        AppSettings.Save();
+    }
+
+    private void Sens_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loading || sender is not RadioButton { Tag: string tag } || !int.TryParse(tag, out int level)) return;
+        AppSettings.Current.AutoFixSensitivity = level;
+        AppSettings.Save();
+    }
+
+    // ---- Diagnostics ----
 
     private void RefreshLayoutMap()
     {
@@ -115,7 +258,7 @@ public partial class MainWindow : Window
         var other = langs.FirstOrDefault(l => !LanguageManager.IsLatin(l.Hkl));
         if (latin == null || other == null)
         {
-            LayoutMapText.Text = "Install a Latin + a non-Latin keyboard layout to view the map.";
+            LayoutMapText.Text = "Потрібні дві розкладки: латинська і кирилична.";
             return;
         }
 
@@ -124,8 +267,6 @@ public partial class MainWindow : Window
 
         var sb = new StringBuilder();
         sb.AppendLine($"{latin.Name}  ↔  {other.Name}");
-
-        // Letter rows (QWERTY order)
         (uint vk, string key)[][] letterRows =
         [
             [(0x51,"Q"),(0x57,"W"),(0x45,"E"),(0x52,"R"),(0x54,"T"),
@@ -138,84 +279,71 @@ public partial class MainWindow : Window
         foreach (var row in letterRows)
         {
             foreach (var (vk, name) in row)
-            {
-                var oc = otherFwd.TryGetValue(vk, out var v) ? v : "?";
-                sb.Append($"{name}:{oc}  ");
-            }
+                sb.Append($"{name}:{(otherFwd.TryGetValue(vk, out var o) ? o : "?")}  ");
             sb.AppendLine();
         }
-
-        // Punctuation keys — show both EN and HE since neither is obvious
         sb.AppendLine();
         sb.AppendLine($"Punctuation  (KEY: {latin.Name}→{other.Name})");
         (uint vk, string key)[] punctKeys =
-        [
-            (0xBA, ";"), (0xDE, "'"), (0xBC, ","), (0xBE, "."), (0xBF, "/"), (0xC0, "`"),
-        ];
+            [(0xBA, ";"), (0xDE, "'"), (0xBC, ","), (0xBE, "."), (0xBF, "/"), (0xC0, "`")];
         foreach (var (vk, name) in punctKeys)
         {
             var lc = latinFwd.TryGetValue(vk, out var lv) ? lv : "?";
             var oc = otherFwd.TryGetValue(vk, out var ov) ? ov : "?";
             sb.Append($"{name}: {lc}→{oc}   ");
         }
-
         LayoutMapText.Text = sb.ToString();
     }
 
     private void RefreshDetect()
     {
+        AutoFixDecisionText.Text = (App.AutoFix.LastDecision ?? "—") +
+            $"\nDictionaries: uk {WordRanks.Embedded.Count("uk"):N0} · en {WordRanks.Embedded.Count("en"):N0}";
+
         var field = FocusInspector.Focused();
         if (field is null)
         {
-            AppLabel.Text = "No field focused";
+            AppLabel.Text = "Поле не в фокусі";
             return;
         }
         AppLabel.Text = $"{field.ControlType}  ·  {field.Name}";
         GuessText.Text = field.Guess;
 
         var langs = LanguageManager.Enabled();
-        LanguagesText.Text = string.Join("   ",
-            langs.Select(l => l.IsCurrent ? $"[{l.Name}]" : l.Name));
+        LanguagesText.Text = string.Join("   ", langs.Select(l => l.IsCurrent ? $"[{l.Name}]" : l.Name));
 
         _suggestion = LayoutConverter.Suggest(field.Value);
         if (_suggestion is { IsMeaningful: true } s)
         {
-            TypedText.Text = $"Typed: {s.Original}   ({s.FromLayout} → {s.ToLayout})";
+            TypedText.Text = $"Набрано: {s.Original}   ({s.FromLayout} → {s.ToLayout})";
             ConvertedText.Text = s.Converted;
             ReplaceButton.IsEnabled = true;
-
-            var v = GibberishDetector.LooksWrongLayout(s.Original, s.Converted, s.FromLang, s.ToLang);
-            GibberishText.Text = v.Wrong
-                ? $"🧠 Likely wrong layout — {(int)(v.Confidence * 100)}% confident"
-                : "🧠 Looks intentional — probably not a layout mistake";
-            GibberishText.Foreground = v.Wrong
-                ? System.Windows.Media.Brushes.LightGreen
-                : System.Windows.Media.Brushes.Gray;
+            var g = GibberishDetector.LooksWrongLayout(s.Original, s.Converted, s.FromLang, s.ToLang);
+            GibberishText.Text = g.Wrong
+                ? $"Біграми: схоже на хибну розкладку · {(int)(g.Confidence * 100)}%"
+                : "Біграми: схоже на навмисний текст";
+            GibberishText.Foreground = g.Wrong ? Lime : Faint;
         }
         else
         {
-            TypedText.Text = "Type ≥3 letters in a field to see a suggestion.";
+            TypedText.Text = "Наберіть у полі 3+ літери, щоб побачити варіант.";
             ConvertedText.Text = "";
             GibberishText.Text = "";
             ReplaceButton.IsEnabled = false;
         }
 
         if (App.Enforcer.LastAction is { } a) AutoLangStatus.Text = a;
-        AutoFixDecisionText.Text = (App.AutoFix.LastDecision ?? "—") +
-            $"\nDictionaries: uk {WordRanks.Embedded.Count("uk"):N0} · en {WordRanks.Embedded.Count("en"):N0}";
     }
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
     {
         if (_suggestion is not { } s) return;
         bool ok = FocusInspector.TrySetFocusedValue(s.FullReplacement);
-        ReplaceResult.Text = ok ? "Replaced ✓" : "Field is read-only — use the global hotkey instead.";
-        ReplaceResult.Foreground = ok
-            ? System.Windows.Media.Brushes.LightGreen
-            : System.Windows.Media.Brushes.IndianRed;
+        ReplaceResult.Text = ok ? "Замінено ✓" : "Поле лише для читання — скористайтеся хоткеєм.";
+        ReplaceResult.Foreground = ok ? Lime : Orange;
     }
 
-    // ---- Settings tab ----
+    // ---- Hotkey ----
 
     private void RecordButton_Click(object sender, RoutedEventArgs e)
     {
@@ -229,34 +357,21 @@ public partial class MainWindow : Window
         if (!_recording) { base.OnPreviewKeyDown(e); return; }
         e.Handled = true;
 
-        // When Alt is held, the key arrives as Key.System with the real key in
-        // SystemKey — resolve that first so the guard below sees the actual key.
+        // With Alt held the key arrives as Key.System; the real key is in SystemKey.
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-
         if (key == Key.Escape) { StopRecording(); return; }
-
-        // Ignore lone modifier presses (incl. when they arrive via Key.System).
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
             or Key.System or Key.None) return;
 
-        // Read each modifier's physical key state directly (both L/R variants).
-        // This is more reliable than Keyboard.Modifiers when Alt routes the event
-        // through Key.System, and on layouts where AltGr reports as Ctrl+Alt.
         uint fs = 0;
-        bool ctrl = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-        bool alt = Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt);
-        bool shift = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
-        bool win = Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin);
-        if (ctrl) fs |= NativeMethods.MOD_CONTROL;
-        if (alt) fs |= NativeMethods.MOD_ALT;
-        if (shift) fs |= NativeMethods.MOD_SHIFT;
-        if (win) fs |= NativeMethods.MOD_WIN;
-
-        uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-
+        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl)) fs |= NativeMethods.MOD_CONTROL;
+        if (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)) fs |= NativeMethods.MOD_ALT;
+        if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift)) fs |= NativeMethods.MOD_SHIFT;
+        if (Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin)) fs |= NativeMethods.MOD_WIN;
         if (fs == 0) return; // require a modifier
-        App.Hotkey.Update(fs, vk);
+
+        App.Hotkey.Update(fs, (uint)KeyInterop.VirtualKeyFromKey(key));
         StopRecording();
     }
 
@@ -267,8 +382,21 @@ public partial class MainWindow : Window
         HotkeyText.Text = App.Hotkey.DisplayString;
     }
 
+    // ---- Auto English ----
+
     private void AutoLangCheck_Click(object sender, RoutedEventArgs e)
         => App.Enforcer.Enabled = AutoLangCheck.IsChecked == true;
+
+    private void AddressBarCheck_Click(object sender, RoutedEventArgs e)
+        => App.Enforcer.AddressBarEnabled = AddressBarCheck.IsChecked == true;
+
+    // ---- System ----
+
+    private void StartupCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool want = StartupCheck.IsChecked == true;
+        if (!StartupManager.Set(want)) StartupCheck.IsChecked = !want;
+    }
 
     private void DebugCheck_Click(object sender, RoutedEventArgs e)
     {
@@ -288,7 +416,131 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // ---- Per-app keyboard ----
+    // ---- Layout chips (replace ComboBoxes: two layouts fit as a segmented choice) ----
+
+    private RadioButton Chip(string text, object? tag, string group) => new()
+    {
+        Content = text,
+        Tag = tag,
+        GroupName = group,
+        Style = (Style)FindResource("Chip"),
+    };
+
+    private void FillLayoutChips(StackPanel panel, string group)
+    {
+        panel.Children.Clear();
+        bool first = true;
+        foreach (var lang in LanguageManager.Enabled())
+        {
+            var c = Chip(lang.Name, lang, group);
+            c.IsChecked = first;
+            first = false;
+            panel.Children.Add(c);
+        }
+    }
+
+    private static InputLanguage? SelectedLayout(StackPanel panel) =>
+        panel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as InputLanguage;
+
+    /// <summary>Per-row chips bound to a rule's HKL; <paramref name="save"/> stores the pick.</summary>
+    private StackPanel RowChips(long hkl, Action<InputLanguage> save)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        string group = "row" + Guid.NewGuid().ToString("N");
+        foreach (var lang in LanguageManager.Enabled())
+        {
+            var c = Chip(lang.Name, lang, group);
+            c.IsChecked = (long)lang.Hkl == hkl;
+            c.Checked += (_, _) => save(lang);
+            panel.Children.Add(c);
+        }
+        return panel;
+    }
+
+    private Border ListRow(UIElement? icon, string title, string? subtitle, UIElement? right, Action onDelete)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        if (icon != null)
+        {
+            if (icon is FrameworkElement fe) fe.Margin = new Thickness(0, 0, 12, 0);
+            Grid.SetColumn(icon, 0);
+            grid.Children.Add(icon);
+        }
+
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock
+        {
+            Text = title, FontWeight = FontWeights.Medium, TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        if (!string.IsNullOrEmpty(subtitle))
+            text.Children.Add(new TextBlock
+            {
+                Text = subtitle, FontSize = 11, Foreground = Faint, TextTrimming = TextTrimming.CharacterEllipsis
+            });
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        if (right != null)
+        {
+            Grid.SetColumn(right, 2);
+            grid.Children.Add(right);
+        }
+
+        var del = new Button { Content = "", Style = (Style)FindResource("IconBtn"), ToolTip = "Видалити" };
+        del.Click += (_, _) => onDelete();
+        Grid.SetColumn(del, 3);
+        grid.Children.Add(del);
+
+        return new Border
+        {
+            Background = ChipBg,
+            BorderBrush = ChipLine,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(12, 8, 6, 8),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = grid,
+        };
+    }
+
+    private static UIElement? AppIcon(string? exePath)
+    {
+        if (string.IsNullOrEmpty(exePath)) return null;
+        var src = LoadAppIcon(exePath);
+        return src is null ? null : new System.Windows.Controls.Image
+        {
+            Source = src, Width = 20, Height = 20, VerticalAlignment = VerticalAlignment.Center
+        };
+    }
+
+    private static BitmapSource? LoadAppIcon(string exePath)
+    {
+        try
+        {
+            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
+            if (icon == null) return null;
+            return Imaging.CreateBitmapSourceFromHIcon(icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+        }
+        catch { return null; }
+    }
+
+    private static void Flash(TextBlock target, ref DispatcherTimer? timer, string msg)
+    {
+        target.Text = msg;
+        target.Visibility = Visibility.Visible;
+        timer?.Stop();
+        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        t.Tick += (_, _) => { t.Stop(); target.Visibility = Visibility.Collapsed; };
+        t.Start();
+        timer = t;
+    }
+
+    // ---- Per-app layout rules ----
 
     private void AppLangCheck_Click(object sender, RoutedEventArgs e)
         => App.AppEnforcer.Enabled = AppLangCheck.IsChecked == true;
@@ -299,38 +551,47 @@ public partial class MainWindow : Window
         var appName = App.AppEnforcer.LastExternalAppName;
         if (exePath == null || appName == null)
         {
-            ShowAddStatus("Спершу перейдіть у потрібну програму, потім натисніть «Додати».");
+            Flash(AddAppStatus, ref _statusTimer, "Спершу перейдіть у потрібну програму, потім натисніть «Додати».");
             return;
         }
         if (AppSettings.Current.AppLanguageRules.Any(r =>
             string.Equals(r.ExePath, exePath, StringComparison.OrdinalIgnoreCase)))
         {
-            ShowAddStatus($"{appName} вже в списку.");
+            Flash(AddAppStatus, ref _statusTimer, $"{appName} вже в списку.");
             return;
         }
-        if (AddLayoutCombo.SelectedItem is not ComboBoxItem { Tag: InputLanguage lang })
+        if (SelectedLayout(AddLayoutChips) is not { } lang)
         {
-            ShowAddStatus("Спершу виберіть розкладку.");
+            Flash(AddAppStatus, ref _statusTimer, "Спершу виберіть розкладку.");
             return;
         }
         AppSettings.Current.AppLanguageRules.Add(new AppLanguageRule
         {
-            ExePath = exePath,
-            AppName = appName,
-            HklValue = (long)lang.Hkl,
-            LayoutName = lang.Name
+            ExePath = exePath, AppName = appName, HklValue = (long)lang.Hkl, LayoutName = lang.Name
         });
         AppSettings.Save();
         RefreshRulesList();
-        ShowAddStatus($"Додано: {appName}.");
+        Flash(AddAppStatus, ref _statusTimer, $"Додано: {appName}.");
     }
 
     private void RefreshRulesList()
     {
         RulesPanel.Children.Clear();
-        var langs = LanguageManager.Enabled();
-        foreach (var rule in AppSettings.Current.AppLanguageRules)
-            RulesPanel.Children.Add(BuildRuleRow(rule, langs));
+        foreach (var rule in AppSettings.Current.AppLanguageRules.ToList())
+        {
+            var chips = RowChips(rule.HklValue, l =>
+            {
+                rule.HklValue = (long)l.Hkl;
+                rule.LayoutName = l.Name;
+                AppSettings.Save();
+            });
+            RulesPanel.Children.Add(ListRow(AppIcon(rule.ExePath), rule.AppName, null, chips, () =>
+            {
+                AppSettings.Current.AppLanguageRules.Remove(rule);
+                AppSettings.Save();
+                RefreshRulesList();
+            }));
+        }
         UpdateAddButtonLabel();
     }
 
@@ -341,99 +602,7 @@ public partial class MainWindow : Window
             : "+ Додати поточну програму";
     }
 
-    private UIElement BuildRuleRow(AppLanguageRule rule, List<InputLanguage> langs)
-    {
-        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-
-        var icon = LoadAppIcon(rule.ExePath);
-        if (icon != null)
-        {
-            var img = new System.Windows.Controls.Image
-                { Source = icon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(img, 0);
-            grid.Children.Add(img);
-        }
-
-        var name = new TextBlock
-        {
-            Text = rule.AppName, FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-            TextTrimming = TextTrimming.CharacterEllipsis
-        };
-        Grid.SetColumn(name, 1);
-        grid.Children.Add(name);
-
-        var combo = new ComboBox { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
-        foreach (var lang in langs)
-        {
-            var item = new ComboBoxItem { Content = lang.Name, Tag = lang };
-            combo.Items.Add(item);
-            if ((long)lang.Hkl == rule.HklValue) combo.SelectedItem = item;
-        }
-        combo.SelectionChanged += (_, _) =>
-        {
-            if (combo.SelectedItem is ComboBoxItem { Tag: InputLanguage l })
-            {
-                rule.HklValue = (long)l.Hkl;
-                rule.LayoutName = l.Name;
-                AppSettings.Save();
-            }
-        };
-        Grid.SetColumn(combo, 2);
-        grid.Children.Add(combo);
-
-        var del = new Button
-        {
-            Content = "✕", Width = 20, Height = 20, FontSize = 11,
-            Background = Brushes.Transparent, BorderThickness = new Thickness(0),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        del.Click += (_, _) =>
-        {
-            AppSettings.Current.AppLanguageRules.Remove(rule);
-            AppSettings.Save();
-            RefreshRulesList();
-        };
-        Grid.SetColumn(del, 3);
-        grid.Children.Add(del);
-
-        return grid;
-    }
-
-    private static BitmapSource? LoadAppIcon(string exePath)
-    {
-        try
-        {
-            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-            if (icon == null) return null;
-            return System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-        }
-        catch { return null; }
-    }
-
-    private void ShowAddStatus(string msg)
-    {
-        AddAppStatus.Text = msg;
-        AddAppStatus.Visibility = Visibility.Visible;
-        _statusTimer?.Stop();
-        _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _statusTimer.Tick += (_, _) =>
-        {
-            _statusTimer.Stop();
-            AddAppStatus.Visibility = Visibility.Collapsed;
-        };
-        _statusTimer.Start();
-    }
-
-    // ---- Per-contact keyboard ----
-
-    private DispatcherTimer? _contactStatusTimer;
+    // ---- Per-contact (Teams) rules ----
 
     private void ContactLangCheck_Click(object sender, RoutedEventArgs e)
         => App.ContactEnforcer.Enabled = ContactLangCheck.IsChecked == true;
@@ -444,38 +613,46 @@ public partial class MainWindow : Window
         var contact = App.ContactEnforcer.LastContactName;
         if (app == null || string.IsNullOrEmpty(contact))
         {
-            ShowContactStatus("Спершу відкрийте чат у Teams, потім натисніть «Додати».");
+            Flash(AddContactStatus, ref _contactStatusTimer, "Спершу відкрийте чат у Teams, потім натисніть «Додати».");
             return;
         }
-        if (AppSettings.Current.ContactLanguageRules.Any(r =>
-            r.App == app.Value && r.ContactName == contact))
+        if (AppSettings.Current.ContactLanguageRules.Any(r => r.App == app.Value && r.ContactName == contact))
         {
-            ShowContactStatus($"{contact} вже в списку.");
+            Flash(AddContactStatus, ref _contactStatusTimer, $"{contact} вже в списку.");
             return;
         }
-        if (ContactLayoutCombo.SelectedItem is not ComboBoxItem { Tag: InputLanguage lang })
+        if (SelectedLayout(ContactLayoutChips) is not { } lang)
         {
-            ShowContactStatus("Спершу виберіть розкладку.");
+            Flash(AddContactStatus, ref _contactStatusTimer, "Спершу виберіть розкладку.");
             return;
         }
         AppSettings.Current.ContactLanguageRules.Add(new ContactLanguageRule
         {
-            App = app.Value,
-            ContactName = contact,
-            HklValue = (long)lang.Hkl,
-            LayoutName = lang.Name
+            App = app.Value, ContactName = contact, HklValue = (long)lang.Hkl, LayoutName = lang.Name
         });
         AppSettings.Save();
         RefreshContactRulesList();
-        ShowContactStatus($"Додано: {contact}.");
+        Flash(AddContactStatus, ref _contactStatusTimer, $"Додано: {contact}.");
     }
 
     private void RefreshContactRulesList()
     {
         ContactRulesPanel.Children.Clear();
-        var langs = LanguageManager.Enabled();
-        foreach (var rule in AppSettings.Current.ContactLanguageRules)
-            ContactRulesPanel.Children.Add(BuildContactRuleRow(rule, langs));
+        foreach (var rule in AppSettings.Current.ContactLanguageRules.ToList())
+        {
+            var chips = RowChips(rule.HklValue, l =>
+            {
+                rule.HklValue = (long)l.Hkl;
+                rule.LayoutName = l.Name;
+                AppSettings.Save();
+            });
+            ContactRulesPanel.Children.Add(ListRow(null, rule.ContactName, rule.App.DisplayName(), chips, () =>
+            {
+                AppSettings.Current.ContactLanguageRules.Remove(rule);
+                AppSettings.Save();
+                RefreshContactRulesList();
+            }));
+        }
         UpdateAddContactButtonLabel();
     }
 
@@ -486,118 +663,7 @@ public partial class MainWindow : Window
             : "+ Додати поточний чат Teams";
     }
 
-    private UIElement BuildContactRuleRow(ContactLanguageRule rule, List<InputLanguage> langs)
-    {
-        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock
-        {
-            Text = rule.ContactName, FontSize = 11,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-        text.Children.Add(new TextBlock
-        {
-            Text = rule.App.DisplayName(), FontSize = 9,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66))
-        });
-        Grid.SetColumn(text, 0);
-        grid.Children.Add(text);
-
-        var combo = new ComboBox { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
-        foreach (var lang in langs)
-        {
-            var item = new ComboBoxItem { Content = lang.Name, Tag = lang };
-            combo.Items.Add(item);
-            if ((long)lang.Hkl == rule.HklValue) combo.SelectedItem = item;
-        }
-        combo.SelectionChanged += (_, _) =>
-        {
-            if (combo.SelectedItem is ComboBoxItem { Tag: InputLanguage l })
-            {
-                rule.HklValue = (long)l.Hkl;
-                rule.LayoutName = l.Name;
-                AppSettings.Save();
-            }
-        };
-        Grid.SetColumn(combo, 1);
-        grid.Children.Add(combo);
-
-        var del = new Button
-        {
-            Content = "✕", Width = 20, Height = 20, FontSize = 11,
-            Background = Brushes.Transparent, BorderThickness = new Thickness(0),
-            Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        del.Click += (_, _) =>
-        {
-            AppSettings.Current.ContactLanguageRules.Remove(rule);
-            AppSettings.Save();
-            RefreshContactRulesList();
-        };
-        Grid.SetColumn(del, 2);
-        grid.Children.Add(del);
-
-        return grid;
-    }
-
-    private void ShowContactStatus(string msg)
-    {
-        AddContactStatus.Text = msg;
-        AddContactStatus.Visibility = Visibility.Visible;
-        _contactStatusTimer?.Stop();
-        _contactStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _contactStatusTimer.Tick += (_, _) =>
-        {
-            _contactStatusTimer.Stop();
-            AddContactStatus.Visibility = Visibility.Collapsed;
-        };
-        _contactStatusTimer.Start();
-    }
-
-    // ---- Auto-fix ----
-
-    private void AutoFixCheck_Click(object sender, RoutedEventArgs e)
-        => App.AutoFix.Enabled = AutoFixCheck.IsChecked == true;
-
-    private void UndoCheck_Click(object sender, RoutedEventArgs e)
-    {
-        AppSettings.Current.AutoFixUndoOnBackspace = UndoCheck.IsChecked == true;
-        AppSettings.Save();
-    }
-
-    private void LearnCheck_Click(object sender, RoutedEventArgs e)
-    {
-        bool on = LearnCheck.IsChecked == true;
-        AppSettings.Current.AutoFixLearnFromUndo = on;
-        AppSettings.Current.AutoFixLearnFromHotkey = on;
-        AppSettings.Save();
-    }
-
-    private void SensitivityCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (SensitivityCombo.SelectedIndex < 0) return;
-        AppSettings.Current.AutoFixSensitivity = SensitivityCombo.SelectedIndex;
-        AppSettings.Save();
-    }
-
-    private void AddressBarCheck_Click(object sender, RoutedEventArgs e)
-        => App.Enforcer.AddressBarEnabled = AddressBarCheck.IsChecked == true;
-
-    private void StartupCheck_Click(object sender, RoutedEventArgs e)
-    {
-        bool want = StartupCheck.IsChecked == true;
-        if (!StartupManager.Set(want)) StartupCheck.IsChecked = !want;
-    }
-
     // ---- Excluded apps ----
-
-    private DispatcherTimer? _excludeStatusTimer;
 
     private void UpdateExcludeButtonLabel()
     {
@@ -612,21 +678,21 @@ public partial class MainWindow : Window
         var appName = App.AppEnforcer.LastExternalAppName;
         if (exePath == null || appName == null)
         {
-            ShowExcludeStatus("Спершу перейдіть у потрібну програму, потім натисніть кнопку.");
+            Flash(ExcludeStatus, ref _excludeStatusTimer, "Спершу перейдіть у потрібну програму, потім натисніть кнопку.");
             return;
         }
         string exeName = System.IO.Path.GetFileName(exePath);
         var list = AppSettings.Current.AutoFixExcludedApps;
         if (list.Any(a => string.Equals(a.ExeName, exeName, StringComparison.OrdinalIgnoreCase)))
         {
-            ShowExcludeStatus($"{appName} вже виключено.");
+            Flash(ExcludeStatus, ref _excludeStatusTimer, $"{appName} вже виключено.");
             return;
         }
         list.Add(new ExcludedApp { ExeName = exeName, AppName = appName, ExePath = exePath });
         AppSettings.Save();
         App.AutoFix.InvalidateLists();
         RefreshExcludedList();
-        ShowExcludeStatus($"Виключено: {appName}.");
+        Flash(ExcludeStatus, ref _excludeStatusTimer, $"Виключено: {appName}.");
     }
 
     private void RefreshExcludedList()
@@ -634,57 +700,15 @@ public partial class MainWindow : Window
         ExcludedPanel.Children.Clear();
         foreach (var app in AppSettings.Current.AutoFixExcludedApps.ToList())
         {
-            var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-
-            if (!string.IsNullOrEmpty(app.ExePath) && LoadAppIcon(app.ExePath) is { } icon)
-            {
-                var img = new System.Windows.Controls.Image
-                    { Source = icon, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
-                Grid.SetColumn(img, 0);
-                grid.Children.Add(img);
-            }
-
-            var name = new TextBlock
-            {
-                Text = $"{app.AppName}  ({app.ExeName})", FontSize = 11,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
-            Grid.SetColumn(name, 1);
-            grid.Children.Add(name);
-
-            var del = DeleteButton();
-            del.Click += (_, _) =>
+            ExcludedPanel.Children.Add(ListRow(AppIcon(app.ExePath), app.AppName, app.ExeName, null, () =>
             {
                 AppSettings.Current.AutoFixExcludedApps.Remove(app);
                 AppSettings.Save();
                 App.AutoFix.InvalidateLists();
                 RefreshExcludedList();
-            };
-            Grid.SetColumn(del, 2);
-            grid.Children.Add(del);
-
-            ExcludedPanel.Children.Add(grid);
+            }));
         }
         UpdateExcludeButtonLabel();
-    }
-
-    private void ShowExcludeStatus(string msg)
-    {
-        ExcludeStatus.Text = msg;
-        ExcludeStatus.Visibility = Visibility.Visible;
-        _excludeStatusTimer?.Stop();
-        _excludeStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _excludeStatusTimer.Tick += (_, _) =>
-        {
-            _excludeStatusTimer.Stop();
-            ExcludeStatus.Visibility = Visibility.Collapsed;
-        };
-        _excludeStatusTimer.Start();
     }
 
     // ---- Personal dictionary ----
@@ -723,35 +747,28 @@ public partial class MainWindow : Window
     private void FillChips(WrapPanel panel, List<string> list)
     {
         panel.Children.Clear();
+        if (list.Count == 0)
+        {
+            panel.Children.Add(new TextBlock { Text = "Поки порожньо.", Foreground = Faint, FontSize = 12 });
+            return;
+        }
         foreach (var word in list.ToList())
         {
-            var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
-            row.Children.Add(new TextBlock
-            {
-                Text = word, FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
-                Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD))
-            });
-            var del = DeleteButton();
-            del.Width = del.Height = 16;
-            del.Margin = new Thickness(4, 0, 0, 0);
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock { Text = word, VerticalAlignment = VerticalAlignment.Center });
+            var del = new Button { Content = "", Style = (Style)FindResource("IconBtn"), Margin = new Thickness(4, 0, 0, 0) };
             del.Click += (_, _) => { UserWords.Remove(list, word); RefreshWordLists(); };
             row.Children.Add(del);
             panel.Children.Add(new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(0x1F, 0x1F, 0x1F)),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(8, 2, 4, 2),
-                Margin = new Thickness(0, 0, 6, 6),
-                Child = row
+                Background = ChipBg,
+                BorderBrush = ChipLine,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 3, 2, 3),
+                Margin = new Thickness(0, 0, 8, 8),
+                Child = row,
             });
         }
     }
-
-    private static Button DeleteButton() => new()
-    {
-        Content = "✕", Width = 20, Height = 20, FontSize = 11,
-        Background = Brushes.Transparent, BorderThickness = new Thickness(0),
-        Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66)),
-        VerticalAlignment = VerticalAlignment.Center
-    };
 }

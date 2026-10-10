@@ -31,6 +31,11 @@
     <PackageReference Include="NetSparkleUpdater.UI.WPF" Version="3.0.4" />
   </ItemGroup>
 
+  <!-- Brand fonts (OFL): Geist for text, Unbounded for headlines. -->
+  <ItemGroup>
+    <Resource Include="Fonts\*.ttf" />
+  </ItemGroup>
+
   <!-- Frequency dictionaries for auto-fix (wordfreq top-40k, CC BY-SA 4.0). -->
   <ItemGroup>
     <EmbeddedResource Include="Dict\words_*.txt" />
