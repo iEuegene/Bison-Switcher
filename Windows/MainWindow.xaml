@@ -638,6 +638,48 @@
                     <TextBlock Style="{StaticResource H1}" Text="Програми"/>
                     <TextBlock Style="{StaticResource Lead}" Text="Де автовиправлення не потрібне, і яку розкладку вмикати в конкретній програмі."/>
 
+                    <Border Style="{StaticResource Card}" Background="{StaticResource CardHiBrush}">
+                        <StackPanel>
+                            <StackPanel.Resources>
+                                <Style x:Key="StepNum" TargetType="TextBlock">
+                                    <Setter Property="FontFamily" Value="{StaticResource Display}"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="FontSize" Value="15"/>
+                                    <Setter Property="Foreground" Value="{StaticResource LimeBrush}"/>
+                                    <Setter Property="Width" Value="26"/>
+                                </Style>
+                                <Style x:Key="StepText" TargetType="TextBlock">
+                                    <Setter Property="FontSize" Value="13"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                    <Setter Property="LineHeight" Value="20"/>
+                                </Style>
+                            </StackPanel.Resources>
+                            <TextBlock Style="{StaticResource H2}" Text="Як додати програму" Margin="0,0,0,12"/>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Style="{StaticResource StepNum}" Text="1"/>
+                                <TextBlock Style="{StaticResource StepText}" Text="Відкрийте потрібну програму і клацніть у ній, наприклад у грі, Photoshop чи Excel."/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Style="{StaticResource StepNum}" Text="2"/>
+                                <TextBlock Style="{StaticResource StepText}" Text="Поверніться сюди: клік по значку BS у треї біля годинника. Кнопки нижче вже показуватимуть назву цієї програми."/>
+                            </DockPanel>
+                            <DockPanel Margin="0,0,0,14">
+                                <TextBlock Style="{StaticResource StepNum}" Text="3"/>
+                                <TextBlock Style="{StaticResource StepText}" Text="Натисніть кнопку в потрібній картці:"/>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource StepText}" Margin="26,0,0,6">
+                                <Run FontWeight="SemiBold" Foreground="{StaticResource LimeBrush}" Text="Виключення"/>
+                                <Run Text="— BS перестане виправляти слова в цій програмі. Для ігор, редакторів коду й програм, де літери працюють як гарячі клавіші. Хоткей Ctrl+Alt+K там і далі працює."/>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource StepText}" Margin="26,0,0,12">
+                                <Run FontWeight="SemiBold" Foreground="{StaticResource LimeBrush}" Text="Розкладка для програми"/>
+                                <Run Text="— щоразу, як ви переходите в цю програму, вмикатиметься вибрана мова. Спершу виберіть UA чи EN поруч із кнопкою, а картку ввімкніть перемикачем праворуч."/>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource RowDesc}" Margin="26,0,0,0" Text="Прибрати програму зі списку — кнопка праворуч від її назви. Розкладку для вже доданої програми можна змінити просто в рядку."/>
+                        </StackPanel>
+                    </Border>
+
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource H2}" Text="Виключення" Margin="0,0,0,4"/>

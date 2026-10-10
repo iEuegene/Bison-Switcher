@@ -359,7 +359,7 @@ public partial class MainWindow : Window
         GuessText.Text = FieldKind(field.Guess);
 
         var langs = LanguageManager.Enabled();
-        LanguagesText.Text = string.Join("   ", langs.Select(l => l.IsCurrent ? $"[{l.Name}]" : l.Name));
+        LanguagesText.Text = string.Join("   ", langs.Select(l => l.IsCurrent ? $"[{Display(l)}]" : Display(l)));
 
         _suggestion = LayoutConverter.Suggest(field.Value);
         if (_suggestion is { IsMeaningful: true } s)
@@ -623,6 +623,9 @@ public partial class MainWindow : Window
 
     // ---- Layout chips (replace ComboBoxes: two layouts fit as a segmented choice) ----
 
+    // Windows names Ukrainian by its ISO code "UK"; people expect "UA".
+    private static string Display(InputLanguage l) => l.Name == "UK" ? "UA" : l.Name;
+
     private RadioButton Chip(string text, object? tag, string group) => new()
     {
         Content = text,
@@ -637,7 +640,7 @@ public partial class MainWindow : Window
         bool first = true;
         foreach (var lang in LanguageManager.Enabled())
         {
-            var c = Chip(lang.Name, lang, group);
+            var c = Chip(Display(lang), lang, group);
             c.IsChecked = first;
             first = false;
             panel.Children.Add(c);
@@ -654,7 +657,7 @@ public partial class MainWindow : Window
         string group = "row" + Guid.NewGuid().ToString("N");
         foreach (var lang in LanguageManager.Enabled())
         {
-            var c = Chip(lang.Name, lang, group);
+            var c = Chip(Display(lang), lang, group);
             c.IsChecked = (long)lang.Hkl == hkl;
             c.Checked += (_, _) => save(lang);
             panel.Children.Add(c);
