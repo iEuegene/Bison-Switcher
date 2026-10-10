@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         AddressBarCheck.IsChecked = App.Enforcer.AddressBarEnabled;
 
         UndoCheck.IsChecked = AppSettings.Current.AutoFixUndoOnBackspace;
+        CapitalizeCheck.IsChecked = AppSettings.Current.AutoCapitalize;
         LearnCheck.IsChecked = AppSettings.Current.AutoFixLearnFromUndo && AppSettings.Current.AutoFixLearnFromHotkey;
         (AppSettings.Current.AutoFixSensitivity switch { 0 => SensCareful, 2 => SensBold, _ => SensNormal }).IsChecked = true;
         SyncAutoFixToggles();
@@ -228,6 +229,12 @@ public partial class MainWindow : Window
     private void AutoFixCheck_Click(object sender, RoutedEventArgs e) => SetAutoFix(AutoFixCheck.IsChecked == true);
     private void SideToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(SideToggle.IsChecked == true);
     private void OvToggle_Click(object sender, RoutedEventArgs e) => SetAutoFix(OvToggle.IsChecked == true);
+
+    private void CapitalizeCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.AutoCapitalize = CapitalizeCheck.IsChecked == true;
+        AppSettings.Save();
+    }
 
     private void UndoCheck_Click(object sender, RoutedEventArgs e)
     {

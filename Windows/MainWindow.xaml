@@ -519,6 +519,18 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Велика літера на початку речення"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="«Привіт. мене звати…» → «Привіт. Мене звати…». Працює після . ! ? і пробілу; скорочення на кшталт «грн.», «т. д.», «e.g.» і три крапки не враховуються. Потрібна мала літера — зітріть велику Backspace і наберіть знову."/>
+                                </StackPanel>
+                                <CheckBox x:Name="CapitalizeCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="CapitalizeCheck_Click"/>
+                            </Grid>
+                            <Border Style="{StaticResource Divider}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
                                     <TextBlock Style="{StaticResource RowTitle}" Text="Backspace скасовує заміну"/>
                                     <TextBlock Style="{StaticResource RowDesc}" Text="Одразу після виправлення повертає набране як було."/>
                                 </StackPanel>

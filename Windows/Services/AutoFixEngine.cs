@@ -45,6 +45,9 @@ public sealed class AutoFixEngine : IDisposable
     private bool _shift;
     private bool _caps, _capsDown;
     private PrevWord? _prev;    // previous short word, for "z ghbdsn" → "я привіт"
+    private char _lastChar;     // last printable character typed (current layout)
+    private bool _capPending;   // next letter starts a sentence → make it upper-case
+    private string? _lastInserted; // text the last fix typed, if any
     private LastFix? _last;
 
     private static readonly uint OwnPid = (uint)Environment.ProcessId;
@@ -172,6 +175,8 @@ public sealed class AutoFixEngine : IDisposable
         _dirty = false;
         _prev = null;
         _last = null;
+        _capPending = false;
+        _lastChar = '\0';
     }
 
     private void MarkDirtyLocked()
@@ -180,6 +185,7 @@ public sealed class AutoFixEngine : IDisposable
         _dirty = true;
         _prev = null;
         _last = null;
+        _capPending = false;
     }
 
     // ---------------------------------------------------------------- hooks
@@ -247,7 +253,7 @@ public sealed class AutoFixEngine : IDisposable
                 or NativeMethods.VK_LWIN or NativeMethods.VK_RWIN)
             return false;
 
-        if (!AppSettings.Current.AutoFixEnabled) return false;
+        if (!AppSettings.Current.AutoFixEnabled && !AppSettings.Current.AutoCapitalize) return false;
 
         // Password field: don't even buffer the keys.
         if (App.Privacy?.Sensitive == true)
@@ -272,6 +278,8 @@ public sealed class AutoFixEngine : IDisposable
                 return true;
             }
             _last = null;
+            _capPending = false;   // deleting the capital lets you retype it lower-case
+            _lastChar = '\0';
             if (_word.Count > 0) _word.RemoveAt(_word.Count - 1);
             else { _dirty = true; _prev = null; } // backspacing into older text
             return false;
@@ -282,8 +290,14 @@ public sealed class AutoFixEngine : IDisposable
         if (vk is NativeMethods.VK_SPACE or NativeMethods.VK_TAB or NativeMethods.VK_RETURN)
             return OnBoundary((ushort)vk);
 
+        char ch = CharOf((uint)vk);
+
         if (IsWordKey((uint)vk))
         {
+            if (_capPending && _word.Count == 0 && !_dirty && TryCapitalize((uint)vk, ch))
+                return true;
+            _capPending = false;
+            _lastChar = ch;
             if (_word.Count < 48) _word.Add(new Stroke((uint)vk, _shift, _caps));
             else _dirty = true;
             return false;
@@ -292,8 +306,10 @@ public sealed class AutoFixEngine : IDisposable
         if (vk == NativeMethods.VK_ESCAPE) { ResetLocked(); return false; }
 
         // Digits, arrows, Home/End, Delete, numpad, F-keys…: the word is no longer
-        // a clean run of letters typed at the caret.
+        // a clean run of letters typed at the caret. Keep the character itself:
+        // "!" and "?" live on the digit row in both layouts.
         MarkDirtyLocked();
+        _lastChar = ch;
         return false;
     }
 
@@ -302,6 +318,46 @@ public sealed class AutoFixEngine : IDisposable
         (NativeMethods.GetAsyncKeyState(NativeMethods.VK_MENU) & 0x8000) != 0 ||
         (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LWIN) & 0x8000) != 0 ||
         (NativeMethods.GetAsyncKeyState(NativeMethods.VK_RWIN) & 0x8000) != 0;
+
+    /// <summary>The character this key types right now in the foreground layout,
+    /// or '\0' for keys that type nothing printable.</summary>
+    private char CharOf(uint vk)
+    {
+        IntPtr hkl = LanguageManager.CurrentHkl();
+        var map = _shift ? KeyboardLayoutMap.ShiftedMap(hkl) : KeyboardLayoutMap.ForwardMap(hkl);
+        if (!map.TryGetValue(vk, out var s) || s.Length != 1) return '\0';
+        char c = s[0];
+        if (_caps && char.IsLetter(c))
+            c = char.IsUpper(c) ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c);
+        return c;
+    }
+
+    /// <summary>First letter of a sentence typed in lower case: swallow the key and
+    /// type the capital instead. The buffer records it as Shift+key, so a later
+    /// layout fix renders the capital too ("Ghbdsn" → "Привіт").</summary>
+    private bool TryCapitalize(uint vk, char ch)
+    {
+        _capPending = false;
+        if (!AppSettings.Current.AutoCapitalize) return false;
+        if (!char.IsLetter(ch) || !char.IsLower(ch)) return false;
+        if (BlockReason() != null) return false;
+        if (!KeystrokeReplacer.SendReplacement(0, char.ToUpperInvariant(ch).ToString())) return false;
+        _lastChar = char.ToUpperInvariant(ch);
+        _word.Add(new Stroke(vk, Shift: true, Caps: false));
+        return true;
+    }
+
+    /// <summary>Why we must not type into the foreground app right now, or null.</summary>
+    private string? BlockReason()
+    {
+        if (App.Privacy?.Sensitive == true) return "password";
+        var fg = App.AppEnforcer;
+        fg.RefreshCurrent();
+        if (fg.CurrentPid == OwnPid) return "own";
+        if (fg.CurrentExePath is { } exe && _lists.Excluded.Contains(Path.GetFileName(exe))) return "app-excluded";
+        if (fg.CurrentIsElevated && !Environment.IsPrivilegedProcess) return "elevated";
+        return null;
+    }
 
     /// <summary>Letter keys plus the OEM keys, which are letters on Cyrillic
     /// layouts (х ї ж є б ю ') and punctuation on Latin ones.</summary>
@@ -315,9 +371,27 @@ public sealed class AutoFixEngine : IDisposable
 
     private bool OnBoundary(ushort boundaryVk)
     {
+        // Extra spaces after ". " keep the capital pending.
+        if (boundaryVk == NativeMethods.VK_SPACE && _capPending && _word.Count == 0 && !_dirty)
+            return false;
+
+        // What the finished word reads like on screen, for the sentence check.
+        string? shown = !_dirty && _word.Count > 0 ? Render(_word, LanguageManager.CurrentHkl()) : null;
+
         bool fixedIt;
-        try { fixedIt = TryFix(boundaryVk); }
+        _lastInserted = null;
+        try { fixedIt = AppSettings.Current.AutoFixEnabled && TryFix(boundaryVk); }
         catch { fixedIt = false; }
+
+        if (fixedIt && _lastInserted is { Length: > 0 } ins)
+        {
+            shown = ins;
+            _lastChar = ins[^1];
+        }
+        _capPending = boundaryVk == NativeMethods.VK_SPACE
+                      && AppSettings.Current.AutoCapitalize
+                      && SentenceRules.EndsSentence(shown, _lastChar);
+        _lastChar = '\0';
 
         if (!fixedIt)
         {
@@ -395,6 +469,7 @@ public sealed class AutoFixEngine : IDisposable
 
         LanguageManager.Switch(other.Hkl);
         Interlocked.Increment(ref _fixCount);
+        _lastInserted = inserted;
         LastFixText = $"{removed} → {inserted}";
 
         _prev = null;

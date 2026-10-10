@@ -170,3 +170,43 @@ public interface IWordRanks
 {
     int Rank(string lang, string normalizedWord);
 }
+
+/// <summary>When the next word should start with a capital letter. Pure logic,
+/// unit-tested: abbreviations ("грн.", "т. д.", "e.g.") and ellipses ("Ну...")
+/// do not end a sentence.</summary>
+public static class SentenceRules
+{
+    private static readonly HashSet<string> Abbreviations = new(StringComparer.Ordinal)
+    {
+        // Ukrainian
+        "т", "д", "п", "р", "рр", "ст", "с", "м", "обл", "вул", "просп", "пров", "буд", "кв",
+        "грн", "коп", "тис", "млн", "млрд", "дол", "див", "напр", "зв", "ін", "под", "ім",
+        "проф", "доц", "акад", "канд", "пп", "пн", "вт", "ср", "чт", "пт", "сб", "нд",
+        "кг", "км", "см", "мм", "хв", "сек", "год", "шт", "уп", "др", "англ", "укр", "лат",
+        // English
+        "eg", "ie", "etc", "vs", "mr", "mrs", "ms", "dr", "st", "approx",
+        "dept", "inc", "ltd", "co", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep",
+        "sept", "oct", "nov", "dec", "fig", "p", "pp", "vol",
+    };
+
+    /// <summary><paramref name="lastWord"/> is the word just finished, as it now reads
+    /// on screen (after any layout fix), or null if unknown; <paramref name="lastChar"/>
+    /// is the last character typed before the space.</summary>
+    public static bool EndsSentence(string? lastWord, char lastChar)
+    {
+        if (lastChar is not ('.' or '!' or '?' or '…')) return false;
+        if (string.IsNullOrEmpty(lastWord)) return true; // e.g. "2025." — digits, unknown word
+
+        if (lastWord.EndsWith("..", StringComparison.Ordinal) || lastWord.EndsWith('…'))
+            return false; // "Ну..." trails off, it doesn't end
+
+        if (lastChar != '.') return true; // ! and ? always end a sentence
+
+        // Abbreviation before the period: the letters of the last dotted chunk.
+        string core = lastWord.TrimEnd('.');
+        int dot = core.LastIndexOf('.');
+        if (dot >= 0) return false; // "т.д." / "e.g." — internal dots mean an abbreviation
+        string key = WordDecider.Normalize(core);
+        return !Abbreviations.Contains(key);
+    }
+}

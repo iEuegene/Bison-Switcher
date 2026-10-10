@@ -64,3 +64,21 @@ public class WordDeciderTests
         Assert.False(WordDecider.ShouldFixPrevious("a", "ф", "en", "uk", Opts, WordRanks.Embedded));
     }
 }
+
+public class SentenceRulesTests
+{
+    [Theory]
+    [InlineData("Привіт.", '.', true)]
+    [InlineData("Привіт!", '!', true)]
+    [InlineData("так?", '?', true)]
+    [InlineData(null, '.', true)]          // "2025." — digits, word unknown
+    [InlineData("грн.", '.', false)]        // abbreviation
+    [InlineData("т.д.", '.', false)]        // internal dot
+    [InlineData("e.g.", '.', false)]
+    [InlineData("Ну...", '.', false)]       // trailing off
+    [InlineData("привіт", 't', false)]      // no punctuation
+    [InlineData("привіт,", ',', false)]
+    public void EndsSentence(string? word, char last, bool expected)
+        => Assert.Equal(expected, SentenceRules.EndsSentence(word, last));
+}
+
