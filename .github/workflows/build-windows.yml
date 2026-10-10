@@ -1,0 +1,57 @@
+# Builds BisonSwitcher.exe on every push to main (download from the run's
+# artifacts) and publishes a GitHub Release when a v* tag is pushed.
+name: Build Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Windows
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Version
+        id: ver
+        run: |
+          $v = '${{ github.ref_name }}'
+          if ($v -match '^v(\d+\.\d+\.\d+)$') { $v = $Matches[1] } else { $v = '' }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        run: dotnet test Tests/Kright.Tests.csproj -c Release --nologo
+
+      - name: Publish single-file exe
+        run: |
+          $extra = @()
+          if ('${{ steps.ver.outputs.version }}') { $extra += "-p:Version=${{ steps.ver.outputs.version }}" }
+          dotnet publish Kright.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish-ua --nologo @extra
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BisonSwitcher
+          path: Windows/publish-ua/BisonSwitcher.exe
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Windows/publish-ua/BisonSwitcher.exe
+          generate_release_notes: true
