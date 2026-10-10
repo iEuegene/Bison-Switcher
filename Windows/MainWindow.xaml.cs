@@ -193,7 +193,8 @@ public partial class MainWindow : Window
         OvFixedSub.Text = fx.UndoCount > 0
             ? $"слів за цей запуск · скасовано {fx.UndoCount}"
             : "слів за цей запуск";
-        OvLast.Text = fx.LastFixText is { } last ? "Останнє: " + last : " ";
+        OvLast.Text = fx.LastFixText ?? "";
+        OvLastLabel.Visibility = fx.LastFixText is null ? Visibility.Collapsed : Visibility.Visible;
 
         int uk = WordRanks.Embedded.Count("uk"), en = WordRanks.Embedded.Count("en");
         OvDict.Text = $"{(uk + en) / 1000:N0} тис.";
@@ -202,7 +203,7 @@ public partial class MainWindow : Window
         OvExcluded.Text = AppSettings.Current.AutoFixExcludedApps.Count.ToString();
         int never = AppSettings.Current.NeverConvert.Count, always = AppSettings.Current.AlwaysConvert.Count;
         OvWords.Text = (never + always).ToString();
-        OvWordsSub.Text = $"ніколи: {never} · завжди: {always}";
+        OvWordsSub.Text = $"не виправляти: {never} · нових слів: {always}";
     }
 
     // ---- Auto-fix toggles (sidebar, overview card, settings page) ----
@@ -297,8 +298,9 @@ public partial class MainWindow : Window
 
     private void RefreshDetect()
     {
-        AutoFixDecisionText.Text = (App.AutoFix.LastDecision ?? "—") +
-            $"\nDictionaries: uk {WordRanks.Embedded.Count("uk"):N0} · en {WordRanks.Embedded.Count("en"):N0}";
+        ShowLastWord(App.AutoFix.LastWord);
+        AutoFixDecisionText.Text =
+            $"Словники: UA {WordRanks.Embedded.Count("uk"):N0} · EN {WordRanks.Embedded.Count("en"):N0} словоформ";
 
         var field = FocusInspector.Focused();
         if (field is null)
@@ -306,8 +308,8 @@ public partial class MainWindow : Window
             AppLabel.Text = "Поле не в фокусі";
             return;
         }
-        AppLabel.Text = $"{field.ControlType}  ·  {field.Name}";
-        GuessText.Text = field.Guess;
+        AppLabel.Text = string.IsNullOrWhiteSpace(field.Name) ? field.ControlType : field.Name;
+        GuessText.Text = FieldKind(field.Guess);
 
         var langs = LanguageManager.Enabled();
         LanguagesText.Text = string.Join("   ", langs.Select(l => l.IsCurrent ? $"[{l.Name}]" : l.Name));
@@ -320,8 +322,8 @@ public partial class MainWindow : Window
             ReplaceButton.IsEnabled = true;
             var g = GibberishDetector.LooksWrongLayout(s.Original, s.Converted, s.FromLang, s.ToLang);
             GibberishText.Text = g.Wrong
-                ? $"Біграми: схоже на хибну розкладку · {(int)(g.Confidence * 100)}%"
-                : "Біграми: схоже на навмисний текст";
+                ? $"Схоже на помилку розкладки · {(int)(g.Confidence * 100)}%"
+                : "Схоже на навмисний текст";
             GibberishText.Foreground = g.Wrong ? Lime : Faint;
         }
         else
@@ -334,6 +336,76 @@ public partial class MainWindow : Window
 
         if (App.Enforcer.LastAction is { } a) AutoLangStatus.Text = a;
     }
+
+    private void ShowLastWord(AutoFixEngine.WordInfo? w)
+    {
+        if (w is null)
+        {
+            DiagWord.Text = "—";
+            DiagVerdict.Text = "Наберіть будь-яке слово й натисніть пробіл.";
+            DiagVerdict.Foreground = Muted;
+            DiagReason.Text = "";
+            return;
+        }
+        switch (w.Reason)
+        {
+            case "app-excluded":
+                DiagWord.Text = w.Typed;
+                DiagVerdict.Text = "Не перевіряється";
+                DiagVerdict.Foreground = Muted;
+                DiagReason.Text = "Ця програма у виключеннях (сторінка «Програми»).";
+                return;
+            case "undo":
+                DiagWord.Text = $"{w.Typed} → {w.Alt}";
+                DiagVerdict.Text = "Скасовано вами (Backspace)";
+                DiagVerdict.Foreground = Orange;
+                DiagReason.Text = "Слово додано в «Не виправляти», якщо ввімкнено навчання.";
+                return;
+        }
+        DiagWord.Text = $"{w.Typed} → {w.Alt}";
+        DiagVerdict.Text = w.Fixed ? $"Виправлено на «{w.Alt}»" : $"Залишено як є: «{w.Typed}»";
+        DiagVerdict.Foreground = w.Fixed ? Lime : TextWhite;
+        DiagReason.Text = ReasonText(w.Reason, w.Fixed);
+    }
+
+    private static string ReasonText(string reason, bool fixedIt) => reason switch
+    {
+        "dict" => "Набране не є словом, а варіант в іншій розкладці є у словнику.",
+        "dict-more-common" => "Обидва варіанти — короткі слова, але варіант в іншій мові набагато вживаніший.",
+        "dict-rare-typed" => "Набране — рідкісне сполучення, а варіант в іншій розкладці — поширене слово.",
+        "always-list" => "Слово є у вашому списку «Навчити нових слів».",
+        "junk-in-typed" => "Посеред набраного є розділові знаки — так не пишуть жодне слово.",
+        "detector" => fixedIt
+            ? "Слова немає у словнику, але воно схоже на слово іншої мови."
+            : "Слова немає у словнику, і воно не схоже на помилку розкладки.",
+        "never-list" => "Слово є у вашому списку «Не виправляти».",
+        "typed-is-word" => "Набране — справжнє слово, тому програма його не чіпає.",
+        "both-words" => "Слово існує в обох мовах — програма не вгадує, що ви мали на увазі.",
+        "typed-looks-native" => "Набране схоже на справжнє слово, хоч його й немає у словнику.",
+        "short" or "short-unknown" => "Закоротке слово, щоб упевнено визначити мову.",
+        "abbreviation" => "Усі літери великі — схоже на абревіатуру.",
+        "mixed-case" => "Велика літера посеред слова — схоже на назву (як iPhone).",
+        "no-model" => "Для цієї мови немає словника.",
+        "junk-but-target-weak" or "alt-not-word" or "alt-leading" or "no-letters" or "length"
+            => "Варіант в іншій розкладці не схожий на слово.",
+        _ => reason,
+    };
+
+    private static string FieldKind(string guess) => guess switch
+    {
+        "Password" => "Поле пароля — автовиправлення вимкнене",
+        FocusedField.AddressBarKind => "Адресний рядок браузера",
+        "Search" => "Поле пошуку",
+        "Email" => "Поле email",
+        "URL" => "Поле посилання (URL)",
+        "Phone number" => "Поле телефону",
+        "Payment" => "Платіжне поле",
+        "Address" => "Поле адреси",
+        "Name" => "Поле імені",
+        "Generic text field" => "Звичайне текстове поле",
+        "Not a text field" => "Не текстове поле",
+        _ => guess,
+    };
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
     {

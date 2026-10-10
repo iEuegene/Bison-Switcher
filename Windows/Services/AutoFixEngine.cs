@@ -55,6 +55,10 @@ public sealed class AutoFixEngine : IDisposable
     /// <summary>Last decision, for the Detect tab (word → result · reason).</summary>
     public string? LastDecision { get; private set; }
 
+    /// <summary>Structured form of the last decision, for the Diagnostics page.</summary>
+    public sealed record WordInfo(string Typed, string Alt, bool Fixed, string Reason);
+    public WordInfo? LastWord { get; private set; }
+
     /// <summary>Counters for this run only (never persisted).</summary>
     public int FixCount => _fixCount;
     public int UndoCount => _undoCount;
@@ -340,6 +344,7 @@ public sealed class AutoFixEngine : IDisposable
         if (fg.CurrentExePath is { } exe && lists.Excluded.Contains(Path.GetFileName(exe)))
         {
             LastDecision = $"{Path.GetFileName(exe)}: excluded";
+            LastWord = new WordInfo(Path.GetFileName(exe), "", false, "app-excluded");
             return false;
         }
 
@@ -356,6 +361,7 @@ public sealed class AutoFixEngine : IDisposable
         var opts = Options(lists);
         var d = WordDecider.Decide(typed, alt, fromLang, other.Lang, opts, WordRanks.Embedded);
         LastDecision = $"{typed} → {alt}: {(d.Convert ? "FIX" : "keep")} · {d.Reason}";
+        LastWord = new WordInfo(typed, alt, d.Convert, d.Reason);
         if (!d.Convert) return false;
 
         string removed = typed, inserted = alt;
@@ -396,6 +402,7 @@ public sealed class AutoFixEngine : IDisposable
         KeystrokeReplacer.SendReplacement(f.Inserted.Length + 1, f.Removed, NativeMethods.VK_SPACE);
         LanguageManager.Switch(f.FromHkl);
         LastDecision = $"undo: {f.Inserted} → {f.Removed}";
+        LastWord = new WordInfo(f.Inserted, f.Removed, false, "undo");
         Interlocked.Increment(ref _undoCount);
         LastFixText = $"скасовано: {f.Inserted} → {f.Removed}";
         _word.Clear();
