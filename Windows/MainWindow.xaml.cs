@@ -562,7 +562,9 @@ public partial class MainWindow : Window
     {
         if (_release is null) return;
         InstallUpdateButton.IsEnabled = false;
-        var progress = new Progress<int>(p => InstallUpdateButton.Content = $"Завантаження… {p}%");
+        var progress = new Progress<DownloadProgress>(p => InstallUpdateButton.Content = p.Total > 0
+            ? $"{p.Done * 100 / p.Total}% · {p.BytesPerSecond / 1048576:0.0} МБ/с"
+            : $"Завантаження… {p.Done / 1048576} МБ");
         string? error = await UpdateService.DownloadAndInstallAsync(_release, progress);
         if (error is null)
         {

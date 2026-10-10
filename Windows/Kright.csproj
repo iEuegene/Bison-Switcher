@@ -14,7 +14,7 @@
     <Product>Bison Switcher</Product>
     <Description>Bison Switcher (BS) — UA/EN layout auto-fix, based on Kright by Yaron Walter (MIT)</Description>
     <RootNamespace>Kright</RootNamespace>
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
   </PropertyGroup>
 
   <!-- UI Automation (focused-field detection) ships with the Windows Desktop
