@@ -4,18 +4,19 @@
 
 ## Завантажити
 
-**[⬇ BisonSwitcher.exe — остання версія](https://github.com/iEuegene/Bison-Switcher/releases/latest/download/BisonSwitcher.exe)**
+**[⬇ Інсталятор BisonSwitcherSetup.exe](https://github.com/iEuegene/Bison-Switcher/releases/latest/download/BisonSwitcherSetup.exe)** — рекомендовано
 
-Один файл, встановлювати нічого не треба: завантажте й запустіть, програма з'явиться в треї (іконка **BS**).
+Встановлюється за кілька секунд без прав адміністратора: ярлик у меню «Пуск», автозапуск з Windows, видалення через «Параметри → Програми».
 
-- Windows може показати «Windows захистив ваш ПК»: файл не підписаний сертифікатом. Натисніть **Докладніше → Виконати однаково**.
-- Щоб запускалась із системою: Налаштування → Система → «Запускати разом з Windows».
+[Portable-версія BisonSwitcher.exe](https://github.com/iEuegene/Bison-Switcher/releases/latest/download/BisonSwitcher.exe) — один файл без встановлення.
+
+Windows може показати «Windows захистив ваш ПК»: файли не підписані платним сертифікатом. Натисніть **Докладніше → Виконати однаково**.
 
 ## Для розробки
 
 - Код, збірка й опис функцій: [`Windows/README-UA.md`](Windows/README-UA.md)
 - Зібрати локально: `Windows\build-ua.cmd` (потрібен .NET 8 SDK)
-- Нова версія для колег: Releases → **Draft a new release** → тег `v1.2.1` → **Publish**. GitHub сам збере exe і прикріпить до релізу.
+- Нова версія для колег: Releases → **Draft a new release** → тег `v1.2.1` → **Publish**. GitHub сам збере інсталятор і portable-exe та прикріпить до релізу.
 
 Зроблено на основі [Kright](https://github.com/walteryaron/Kright) — Yaron Walter / Walter Technologies LTD, ліцензія MIT
 (див. [`LICENSE`](LICENSE)). Оригінальний README: [`README.Kright.md`](README.Kright.md).

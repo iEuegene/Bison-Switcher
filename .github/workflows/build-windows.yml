@@ -46,14 +46,28 @@ jobs:
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
             -o publish-ua --nologo @extra
 
+      - name: Build installer (Inno Setup)
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress | Out-Null
+          }
+          $v = '${{ steps.ver.outputs.version }}'
+          if (-not $v) { $v = ([xml](Get-Content Kright.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1 }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Qp "/DMyAppVersion=$v" installer\BisonSwitcher.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
           name: BisonSwitcher
-          path: Windows/publish-ua/BisonSwitcher.exe
+          path: |
+            Windows/publish-ua/BisonSwitcher.exe
+            Windows/installer/output/BisonSwitcherSetup.exe
 
       - name: GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name || github.ref_name }}
-          files: Windows/publish-ua/BisonSwitcher.exe
+          files: |
+            Windows/installer/output/BisonSwitcherSetup.exe
+            Windows/publish-ua/BisonSwitcher.exe
