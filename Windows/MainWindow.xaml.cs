@@ -201,7 +201,8 @@ public partial class MainWindow : Window
         }
 
         if (App.Enforcer.LastAction is { } a) AutoLangStatus.Text = a;
-        AutoFixDecisionText.Text = App.AutoFix.LastDecision ?? "—";
+        AutoFixDecisionText.Text = (App.AutoFix.LastDecision ?? "—") +
+            $"\nDictionaries: uk {WordRanks.Embedded.Count("uk"):N0} · en {WordRanks.Embedded.Count("en"):N0}";
     }
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)

@@ -7,7 +7,7 @@ namespace Kright.Services;
 /// Frequency dictionaries (one word per line, most common first) used by
 /// <see cref="WordDecider"/>. Bundled as embedded resources <c>Dict/words_&lt;lang&gt;.txt</c>;
 /// languages without a list simply return rank 0 and fall back to the bigram model.
-/// Source: wordfreq top-40k lists (CC BY-SA 4.0), filtered to plain words.
+/// Source: wordfreq lists (CC BY-SA 4.0), filtered to plain words.
 /// </summary>
 public sealed class WordRanks : IWordRanks
 {
@@ -25,6 +25,9 @@ public sealed class WordRanks : IWordRanks
         var table = Table(WordDecider.Lang2(lang));
         return table.TryGetValue(normalizedWord, out var r) ? r : 0;
     }
+
+    /// <summary>How many words the list for <paramref name="lang"/> holds (0 = none bundled).</summary>
+    public int Count(string lang) => Table(WordDecider.Lang2(lang)).Count;
 
     /// <summary>Load every bundled list now, so the first keystroke-time lookup
     /// doesn't pay for parsing inside the keyboard hook.</summary>

@@ -21,6 +21,9 @@ public class WordDeciderTests
     [InlineData("ve,m-zrbq", "будь-який")]
     [InlineData("v`zcj", "м'ясо")]
     [InlineData("ckjdj", "слово")]
+    [InlineData("ntcne.", "тестую")]        // rare inflection, '.' key = ю
+    [InlineData("nfr", "так")]              // "nfr" is a rare English token, "так" is top-20
+    [InlineData("dsl", "від")]
     public void Fixes_Ukrainian_TypedOnEnglish(string typed, string alt)
         => Assert.True(D(typed, alt, "en", "uk").Convert);
 

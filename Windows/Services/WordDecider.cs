@@ -6,7 +6,9 @@ public sealed record AutoFixOptions(
     IReadOnlySet<string> Always,
     int MinLettersUnknown,
     double MinConfidence,
-    int RankRatio = 20);
+    int RankRatio = 20,
+    int RareTypedRank = 15000,
+    double JunkMinConfidence = 0.5);
 
 public readonly record struct FixDecision(bool Convert, string Reason, double Confidence)
 {
@@ -90,6 +92,10 @@ public static class WordDecider
             // word); a real 3+ letter word as typed is never touched (руку ≠ here).
             if (letters == 2 && typedLetters == 2 && (long)rs > (long)o.RankRatio * rd)
                 return FixDecision.Yes("dict-more-common", 0.9);
+            // Longer: only when what was typed is itself a rare dictionary entry
+            // ("dsl" → "від", "nfr" → "так"), never a common word.
+            if (rs > o.RareTypedRank && (long)rs > (long)o.RankRatio * rd)
+                return FixDecision.Yes("dict-rare-typed", 0.85);
             return FixDecision.No("both-words");
         }
         if (rs > 0) return FixDecision.No("typed-is-word");
@@ -107,7 +113,7 @@ public static class WordDecider
         if (typedHasJunk)
         {
             double target = GibberishDetector.WordConfidence(aCore, toLang) ?? 0;
-            return target >= o.MinConfidence
+            return target >= o.JunkMinConfidence
                 ? FixDecision.Yes("junk-in-typed", target)
                 : FixDecision.No("junk-but-target-weak", target);
         }
