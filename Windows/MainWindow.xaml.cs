@@ -1040,6 +1040,7 @@ public partial class MainWindow : Window
             SmoothScroller.Verdict.HighRes => ("Коліщатко з високою точністю — воно вже плавне, BS його не чіпає.", Muted),
             SmoothScroller.Verdict.Modifier => ("Ctrl, Alt або Shift затиснуто — звичайна прокрутка.", Muted),
             SmoothScroller.Verdict.Game => (app + "гра, звичайна прокрутка", Muted),
+            SmoothScroller.Verdict.Coarse => (app + "програма не вміє дрібних кроків прокрутки (WPF), лишаю звичайну", Muted),
             SmoothScroller.Verdict.Excluded => (app + "у списку «Без плавної прокрутки»", Muted),
             SmoothScroller.Verdict.Elevated => (app + "запущено від адміністратора — Windows не дає BS прокручувати це вікно. Див. «Система» → «Працювати і в адмін-вікнах».", Orange),
             _ => ("", Muted),
