@@ -284,6 +284,58 @@
             </Setter>
         </Style>
 
+        <!-- Slider: lime fill on the brand-green track -->
+        <Style x:Key="SliderFill" TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="Transparent">
+                            <Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="BrandSlider" TargetType="Slider">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Border x:Name="focus" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8" Padding="4,0">
+                            <Track x:Name="PART_Track" Height="24">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderFill}" Background="#F0FC7E" Command="Slider.DecreaseLarge"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource SliderFill}" Background="#16392C" Command="Slider.IncreaseLarge"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Width="16" Height="16" Fill="#F0FC7E" Stroke="#003B29" StrokeThickness="2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="focus" Property="BorderBrush" Value="#F0FC7E"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style TargetType="TextBox">
             <Setter Property="Foreground" Value="#F7F7F7"/>
             <Setter Property="CaretBrush" Value="#F0FC7E"/>
@@ -383,6 +435,8 @@
                                  Background="#1F5C46" BorderBrush="#F0FC7E" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavLayout" Style="{StaticResource NavItem}" Content="Розкладка" Tag="&#xE765;"
                                  Background="#F0FC7E" BorderBrush="#003B29" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavScroll" Style="{StaticResource NavItem}" Content="Прокрутка" Tag="&#xE8CB;"
+                                 Background="#1F5C46" BorderBrush="#F7F7F7" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavSystem" Style="{StaticResource NavItem}" Content="Система" Tag="&#xE713;"
                                  Background="#1C1C1C" BorderBrush="#F7F7F7" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavDetect" Style="{StaticResource NavItem}" Content="Діагностика" Tag="&#xEBE8;"
@@ -531,10 +585,12 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,24,0">
-                                    <TextBlock Style="{StaticResource RowTitle}" Text="Backspace скасовує заміну"/>
-                                    <TextBlock Style="{StaticResource RowDesc}" Text="Одразу після виправлення повертає набране як було."/>
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Скасувати заміну"/>
+                                    <TextBlock x:Name="UndoHintText" Style="{StaticResource RowDesc}"/>
                                 </StackPanel>
-                                <CheckBox x:Name="UndoCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="UndoCheck_Click"/>
+                                <Border Grid.Column="1" Background="#0B2A20" BorderBrush="#2E5E4C" BorderThickness="1" CornerRadius="10" Padding="10,5" VerticalAlignment="Center">
+                                    <TextBlock x:Name="UndoHotkeyText" FontFamily="{StaticResource Display}" FontWeight="Bold" FontSize="12" Foreground="#F0FC7E"/>
+                                </Border>
                             </Grid>
                             <Border Style="{StaticResource Divider}"/>
                             <Grid>
@@ -544,7 +600,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,24,0">
                                     <TextBlock Style="{StaticResource RowTitle}" Text="Вчитися на моїх діях"/>
-                                    <TextBlock Style="{StaticResource RowDesc}" Text="Скасоване вами слово потрапляє в «Не виправляти». Слово, двічі виправлене хоткеєм, — у «Навчити нових слів»."/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Слово, заміну якого ви скасували, потрапляє в «Не виправляти». Слово, двічі виправлене хоткеєм вручну, — у «Навчити нових слів»."/>
                                 </StackPanel>
                                 <CheckBox x:Name="LearnCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="LearnCheck_Click"/>
                             </Grid>
@@ -560,7 +616,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,24,0">
                                     <TextBlock Style="{StaticResource H2}" Text="Виправлення помилок" Margin="0,0,0,4"/>
-                                    <TextBlock Style="{StaticResource RowDesc}" Text="Використовує перевірку правопису Windows: «пирвіт» → «привіт», «teh» → «the». Виправляє лише очевидні описки — одна зайва, пропущена чи переставлена літера — і лише якщо правильне слово є у словнику. Імена й рідкісні слова не чіпає. Backspace одразу після заміни скасовує її."/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Використовує перевірку правопису Windows: «пирвіт» → «привіт», «teh» → «the». Виправляє лише очевидні описки — одна зайва, пропущена чи переставлена літера — і лише якщо правильне слово є у словнику. Імена й рідкісні слова не чіпає. Скасувати — хоткеєм одразу після заміни."/>
                                 </StackPanel>
                                 <CheckBox x:Name="SpellCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="SpellCheck_Click"/>
                             </Grid>
@@ -788,6 +844,137 @@
                 </StackPanel>
             </ScrollViewer>
 
+            <!-- ===== SMOOTH SCROLL ===== -->
+            <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+                <StackPanel Margin="40,34,40,30" MaxWidth="820">
+                    <TextBlock Style="{StaticResource H1}" Text="Плавна прокрутка"/>
+                    <TextBlock Style="{StaticResource Lead}" Text="Один клік коліщатка — не ривок на три рядки, а плавний рух сторінки. Для миші з коліщатком; тачпад і коліщатка з високою точністю не чіпаються."/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Плавна прокрутка коліщатком"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Ctrl + коліщатко (масштаб) і бічний нахил коліщатка лишаються як є."/>
+                                </StackPanel>
+                                <CheckBox x:Name="ScrollCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="ScrollCheck_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="ScrollLiveText" Margin="0,14,0,0" FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource H2}" Text="Відчуття" Margin="0,0,0,4"/>
+                            <TextBlock Style="{StaticResource RowDesc}" Margin="0,0,0,14" Text="Виберіть готовий варіант або підлаштуйте повзунки — тоді вибір стане «Власний»."/>
+                            <WrapPanel Margin="0,0,0,18">
+                                <RadioButton x:Name="PresetSoft" Style="{StaticResource Chip}" GroupName="scrollPreset" Content="М'який" Tag="0" Checked="ScrollPreset_Checked"/>
+                                <RadioButton x:Name="PresetStandard" Style="{StaticResource Chip}" GroupName="scrollPreset" Content="Стандарт" Tag="1" Checked="ScrollPreset_Checked"/>
+                                <RadioButton x:Name="PresetFast" Style="{StaticResource Chip}" GroupName="scrollPreset" Content="Швидкий" Tag="2" Checked="ScrollPreset_Checked"/>
+                                <RadioButton x:Name="PresetCustom" Style="{StaticResource Chip}" GroupName="scrollPreset" Content="Власний" Tag="3" Checked="ScrollPreset_Checked"/>
+                            </WrapPanel>
+
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="190"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="80"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Відстань за клік" VerticalAlignment="Center"/>
+                                <Slider x:Name="StepSlider" Grid.Column="1" Style="{StaticResource BrandSlider}" Minimum="50" Maximum="200"
+                                        SmallChange="5" LargeChange="25" TickFrequency="5" IsSnapToTickEnabled="True"
+                                        AutomationProperties.Name="Відстань за клік" ValueChanged="ScrollSlider_ValueChanged"/>
+                                <TextBlock x:Name="StepValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource Display}" FontWeight="Bold" Foreground="#F0FC7E"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="190"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="80"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Тривалість руху" VerticalAlignment="Center"/>
+                                <Slider x:Name="DurationSlider" Grid.Column="1" Style="{StaticResource BrandSlider}" Minimum="100" Maximum="800"
+                                        SmallChange="20" LargeChange="100" TickFrequency="20" IsSnapToTickEnabled="True"
+                                        AutomationProperties.Name="Тривалість руху" ValueChanged="ScrollSlider_ValueChanged"/>
+                                <TextBlock x:Name="DurationValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource Display}" FontWeight="Bold" Foreground="#F0FC7E"/>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="190"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="80"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Прискорення"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="коли крутите швидко"/>
+                                </StackPanel>
+                                <Slider x:Name="AccelSlider" Grid.Column="1" Style="{StaticResource BrandSlider}" Minimum="1" Maximum="4"
+                                        SmallChange="0.25" LargeChange="0.5" TickFrequency="0.25" IsSnapToTickEnabled="True"
+                                        AutomationProperties.Name="Прискорення" ValueChanged="ScrollSlider_ValueChanged"/>
+                                <TextBlock x:Name="AccelValue" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource Display}" FontWeight="Bold" Foreground="#F0FC7E"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource H2}" Text="Де працює"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Shift + коліщатко теж плавно"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Горизонтальна прокрутка широких таблиць і таймлайнів."/>
+                                </StackPanel>
+                                <CheckBox x:Name="ShiftScrollCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="ShiftScrollCheck_Click"/>
+                            </Grid>
+                            <Border Style="{StaticResource Divider}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Вимикати в іграх"/>
+                                    <TextBlock x:Name="GameScrollDesc" Style="{StaticResource RowDesc}" Text="Ігри зі Steam, Epic, GOG, Riot, Ubisoft, EA, Xbox і ті, що Windows сама позначила як гру. Штучна прокрутка в грі збиває перемикання зброї й може не сподобатися античиту."/>
+                                </StackPanel>
+                                <CheckBox x:Name="GameScrollCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="GameScrollCheck_Click"/>
+                            </Grid>
+                            <Border Style="{StaticResource Divider}"/>
+                            <TextBlock Style="{StaticResource RowTitle}" Text="LibreOffice Calc: рядок за рядком"/>
+                            <TextBlock Style="{StaticResource RowDesc}" Margin="0,3,0,12"
+                                       Text="Calc прокручує аркуш лише цілими рядками, тому один клік розкладається на кілька кроків по рядку. Який спосіб приймає ваша версія — перевіряємо: відкрийте аркуш, виберіть A, покрутіть коліщатко, потім B і C. Залиште той, з яким аркуш іде рівно по одному рядку."/>
+                            <WrapPanel>
+                                <RadioButton x:Name="CalcA" Style="{StaticResource Chip}" GroupName="calc" Content="A" Tag="0" Checked="CalcMethod_Checked"/>
+                                <RadioButton x:Name="CalcB" Style="{StaticResource Chip}" GroupName="calc" Content="B" Tag="1" Checked="CalcMethod_Checked"/>
+                                <RadioButton x:Name="CalcC" Style="{StaticResource Chip}" GroupName="calc" Content="C" Tag="2" Checked="CalcMethod_Checked"/>
+                                <RadioButton x:Name="CalcOff" Style="{StaticResource Chip}" GroupName="calc" Content="Як у Calc" Tag="3" Checked="CalcMethod_Checked"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource H2}" Text="Без плавної прокрутки" Margin="0,0,0,4"/>
+                            <TextBlock Style="{StaticResource RowDesc}" Margin="0,0,0,14" Text="Програми, де коліщатко лишається звичайним. Перейдіть у потрібну програму, потім поверніться і натисніть кнопку."/>
+                            <StackPanel x:Name="ScrollExcludedPanel"/>
+                            <Button x:Name="ScrollExcludeButton" Style="{StaticResource Primary}" Content="+ Вимкнути в поточній програмі"
+                                    Margin="0,12,0,0" Click="ScrollExcludeButton_Click"/>
+                            <TextBlock x:Name="ScrollExcludeStatus" Style="{StaticResource Status}" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
             <!-- ===== SYSTEM ===== -->
             <ScrollViewer x:Name="PageSystem" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
                 <StackPanel Margin="40,34,40,30" MaxWidth="820">
@@ -806,6 +993,19 @@
                                     <TextBlock Style="{StaticResource RowDesc}" Text="Bison Switcher стартує у треї після входу в систему."/>
                                 </StackPanel>
                                 <CheckBox x:Name="StartupCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="StartupCheck_Click"/>
+                            </Grid>
+                            <Border Style="{StaticResource Divider}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,24,0">
+                                    <TextBlock Style="{StaticResource RowTitle}" Text="Працювати і в адмін-вікнах"/>
+                                    <TextBlock Style="{StaticResource RowDesc}" Text="Windows не дає звичайній програмі вводити текст і прокручувати у вікнах, запущених від адміністратора (Диспетчер завдань, інсталятори). З цим перемикачем увесь BS, разом з автовиправленням, працює з правами адміністратора. Windows попросить дозвіл один раз; далі BS стартує з Windows уже з цими правами."/>
+                                    <TextBlock x:Name="AdminStatus" Style="{StaticResource Status}" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <CheckBox x:Name="AdminCheck" Grid.Column="1" Style="{StaticResource Toggle}" Click="AdminCheck_Click"/>
                             </Grid>
                             <Border Style="{StaticResource Divider}"/>
                             <Grid>

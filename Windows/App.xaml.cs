@@ -32,6 +32,8 @@ public partial class App : Application
     public static ContactLanguageEnforcer ContactEnforcer { get; private set; } = null!;
     public static PrivacyMonitor Privacy { get; private set; } = null!;
     public static AutoFixEngine AutoFix { get; private set; } = null!;
+    /// <summary>Null until startup has created it; the mouse hook checks.</summary>
+    public static SmoothScroller? Scroller { get; private set; }
 
     /// <summary>Newer release found by the last check, if any.</summary>
     public static ReleaseInfo? AvailableUpdate { get; set; }
@@ -71,8 +73,13 @@ public partial class App : Application
         ContactEnforcer = new ContactLanguageEnforcer();
         ContactEnforcer.Start();
 
+        Scroller = new SmoothScroller();
+        Scroller.Start();
+
         AutoFix = new AutoFixEngine();
         AutoFix.Start();
+        AutoFix.Undone += word => ShowInfoBalloon("Більше не виправлятиму",
+            $"«{word}» додано в «Не виправляти». Прибрати — у розділі «Словник».");
         AppEnforcer.ForegroundChanged += AutoFix.FocusMoved;
         AutoFix.StateChanged += () => { if (_autoFixItem != null) _autoFixItem.Checked = AutoFix.Enabled; };
 
@@ -123,8 +130,32 @@ public partial class App : Application
         return r;
     }
 
+    private void ShowInfoBalloon(string title, string text)
+    {
+        if (_tray is null) return;
+        _balloonIsUpdate = false;
+        _tray.BalloonTipTitle = title;
+        _tray.BalloonTipText = text;
+        _tray.BalloonTipIcon = ToolTipIcon.None;
+        _tray.ShowBalloonTip(4000);
+    }
+
+    private bool _balloonIsUpdate;
+
+    /// <summary>Restart BS: through the admin task, or as a normal process. The
+    /// single-instance mutex is released first so the new copy can start.</summary>
+    public static void Restart(bool elevated)
+    {
+        _singleInstance?.ReleaseMutex();
+        _singleInstance?.Dispose();
+        _singleInstance = null;
+        bool started = elevated ? StartupManager.RunElevatedTask() : StartupManager.StartUnelevated();
+        if (started) Current.Shutdown();
+    }
+
     private void ShowUpdateBalloon(ReleaseInfo u)
     {
+        _balloonIsUpdate = true;
         if (_tray is null) return;
         _tray.BalloonTipTitle = "Доступна нова версія Bison Switcher";
         _tray.BalloonTipText = $"Версія {u.Version.ToString(3)} вже на GitHub. Натисніть, щоб оновити.";
@@ -197,7 +228,7 @@ public partial class App : Application
             Text = "Bison Switcher",
             ContextMenuStrip = menu
         };
-        _tray.BalloonTipClicked += (_, _) => ShowWindow(tab: 2);
+        _tray.BalloonTipClicked += (_, _) => ShowWindow(tab: _balloonIsUpdate ? 2 : 3);
         _tray.MouseClick += (_, ev) =>
         {
             if (ev.Button == MouseButtons.Left) ToggleWindow();
@@ -222,6 +253,9 @@ public partial class App : Application
 
     public static void FixFocusedLayout()
     {
+        // Right after an auto-fix the hotkey means "no, put it back".
+        if (AutoFix.TryUndoLast()) return;
+
         var field = FocusInspector.Focused();
         if (field is null) { SystemSounds.Beep.Play(); return; }
 
@@ -254,6 +288,7 @@ public partial class App : Application
         // Null-safe: a second instance shuts down before anything is created.
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         AutoFix?.Dispose();
+        Scroller?.Dispose();
         Hotkey?.Dispose();
         AppEnforcer?.Dispose();
         ContactEnforcer?.Dispose();

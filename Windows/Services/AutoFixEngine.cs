@@ -28,7 +28,7 @@ public sealed class AutoFixEngine : IDisposable
 
     private sealed record PrevWord(List<Stroke> Keys, IntPtr Hkl);
 
-    /// <summary>What the last fix did, so an immediate Backspace can undo it.</summary>
+    /// <summary>What the last fix did, so the hotkey pressed right after it can undo it.</summary>
     private sealed record LastFix(string Removed, string Inserted, IntPtr FromHkl, string LearnKey);
 
     private sealed record Lists(HashSet<string> Never, HashSet<string> Always, HashSet<string> Excluded);
@@ -108,12 +108,18 @@ public sealed class AutoFixEngine : IDisposable
             _mouseHook = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _mouseProc, mod, 0);
             ready.Set();
 
+            // Watchdog: Windows silently removes a low-level hook that once took
+            // longer than LowLevelHooksTimeout, and never says so. Re-installing
+            // both hooks every 30 s brings them back if that happened.
+            NativeMethods.SetTimer(IntPtr.Zero, UIntPtr.Zero, 30_000, IntPtr.Zero);
+
             if (AppSettings.Current.SpellCheckEnabled) WarmSpell();
 
             // LL hooks are delivered through this thread's message loop.
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
             {
                 if (msg.message == WM_APP_WARM_SPELL) { WarmSpell(); continue; }
+                if (msg.message == NativeMethods.WM_TIMER && msg.hwnd == IntPtr.Zero) { Rehook(mod); continue; }
                 NativeMethods.TranslateMessage(ref msg);
                 NativeMethods.DispatchMessage(ref msg);
             }
@@ -130,6 +136,30 @@ public sealed class AutoFixEngine : IDisposable
         _thread.Start();
         ready.Wait(2000);
     }
+
+    /// <summary>Hook thread only. New hooks go in before the old ones come out;
+    /// no event is dispatched in between, as both run on this thread.</summary>
+    private void Rehook(IntPtr mod)
+    {
+        var kb = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _kbProc, mod, 0);
+        if (kb != IntPtr.Zero)
+        {
+            if (_kbHook != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(_kbHook);
+            _kbHook = kb;
+        }
+        var mouse = NativeMethods.SetWindowsHookEx(NativeMethods.WH_MOUSE_LL, _mouseProc, mod, 0);
+        if (mouse != IntPtr.Zero)
+        {
+            if (_mouseHook != IntPtr.Zero) NativeMethods.UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = mouse;
+        }
+        HooksRefreshedAt = DateTime.Now;
+    }
+
+    /// <summary>Last time the watchdog re-installed the hooks (for the System page).</summary>
+    public DateTime? HooksRefreshedAt { get; private set; }
+
+    public bool HooksInstalled => _kbHook != IntPtr.Zero && _mouseHook != IntPtr.Zero;
 
     public void Stop()
     {
@@ -223,6 +253,16 @@ public sealed class AutoFixEngine : IDisposable
         if (nCode >= 0)
         {
             int msg = (int)wParam;
+            if (msg == NativeMethods.WM_MOUSEWHEEL && App.Scroller is { } scroller)
+            {
+                try
+                {
+                    var m = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+                    if (scroller.OnWheel(m)) return (IntPtr)1;
+                }
+                catch { /* never let an exception escape into the hook chain */ }
+                return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+            }
             // A click usually moves the caret.
             if (msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONDOWN
                     or NativeMethods.WM_MBUTTONDOWN or NativeMethods.WM_XBUTTONDOWN)
@@ -290,6 +330,11 @@ public sealed class AutoFixEngine : IDisposable
             return false;
         }
 
+        // The manual-fix hotkey: let it through without dropping the last fix, so
+        // pressing it right after an auto-fix can undo that fix (TryUndoLast).
+        // FixFocusedLayout resets the word buffer itself.
+        if (IsHotkeyKey(vk)) return false;
+
         // Shortcuts (Ctrl+V, Alt+Tab, AltGr letters…) change text in ways we can't
         // track: drop the word and wait for the next clean boundary.
         if (msg == NativeMethods.WM_SYSKEYDOWN || ModifierHeld())
@@ -300,11 +345,8 @@ public sealed class AutoFixEngine : IDisposable
 
         if (vk == NativeMethods.VK_BACK)
         {
-            if (_last != null && AppSettings.Current.AutoFixUndoOnBackspace)
-            {
-                Undo();
-                return true;
-            }
+            // Backspace is just Backspace: it used to undo the last fix, which made
+            // correcting an ending or a stray space impossible.
             _last = null;
             _capPending = false;   // deleting the capital lets you retype it lower-case
             _lastChar = '\0';
@@ -339,6 +381,19 @@ public sealed class AutoFixEngine : IDisposable
         MarkDirtyLocked();
         _lastChar = ch;
         return false;
+    }
+
+    /// <summary>This key-down is the manual-fix hotkey (its key with exactly its modifiers).</summary>
+    private static bool IsHotkeyKey(int vk)
+    {
+        var s = AppSettings.Current;
+        if ((uint)vk != s.HotkeyVk) return false;
+        static bool D(int k) => (NativeMethods.GetAsyncKeyState(k) & 0x8000) != 0;
+        uint held = (D(NativeMethods.VK_CONTROL) ? NativeMethods.MOD_CONTROL : 0)
+                  | (D(NativeMethods.VK_MENU) ? NativeMethods.MOD_ALT : 0)
+                  | (D(NativeMethods.VK_SHIFT) ? NativeMethods.MOD_SHIFT : 0)
+                  | (D(NativeMethods.VK_LWIN) || D(NativeMethods.VK_RWIN) ? NativeMethods.MOD_WIN : 0);
+        return held == (s.HotkeyModifiers & ~NativeMethods.MOD_NOREPEAT);
     }
 
     private static bool ModifierHeld() =>
@@ -555,26 +610,50 @@ public sealed class AutoFixEngine : IDisposable
         return true;
     }
 
-    private void Undo()
+    /// <summary>The manual-fix hotkey was pressed. If the last thing that happened
+    /// was an auto-fix (nothing typed since), put back what was typed and learn
+    /// the word. Returns false when there is nothing to undo. UI thread.</summary>
+    public bool TryUndoLast()
     {
-        var f = _last!;
-        _last = null;
-        // Remove the inserted text + the space we typed, put back the original + space.
-        KeystrokeReplacer.SendReplacement(f.Inserted.Length + 1, f.Removed, NativeMethods.VK_SPACE);
-        LanguageManager.Switch(f.FromHkl);
+        LastFix? f;
+        lock (_gate)
+        {
+            f = _last;
+            if (f is null) return false;
+            _last = null;
+            _word.Clear();
+            _dirty = false;
+            _prev = null;
+        }
+
+        // The hotkey's Ctrl/Alt are still held: injected Backspaces would become
+        // Ctrl+Backspace (delete a whole word). Wait until they are released.
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (ModifierHeld() || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_SHIFT) & 0x8000) != 0)
+            {
+                if (sw.ElapsedMilliseconds > 1500) return;
+                Thread.Sleep(10);
+            }
+            // Remove the inserted text + the space we typed, put back the original + space.
+            KeystrokeReplacer.SendReplacement(f.Inserted.Length + 1, f.Removed, NativeMethods.VK_SPACE);
+            LanguageManager.Switch(f.FromHkl);
+        });
+
         LastDecision = $"undo: {f.Inserted} → {f.Removed}";
         LastWord = new WordInfo(f.Inserted, f.Removed, false, "undo");
         Interlocked.Increment(ref _undoCount);
         LastFixText = $"скасовано: {f.Inserted} → {f.Removed}";
-        _word.Clear();
-        _dirty = false;
-        _prev = null;
 
-        // Settings are only ever mutated on the UI thread.
-        if (AppSettings.Current.AutoFixLearnFromUndo)
-            _ui.InvokeAsync(() => UserWords.AddNever(f.LearnKey));
+        if (AppSettings.Current.AutoFixLearnFromUndo && UserWords.AddNever(f.LearnKey))
+            Undone?.Invoke(f.LearnKey);
         RaiseStateChanged();
+        return true;
     }
+
+    /// <summary>A word was undone and learned (UI thread): the tray says so.</summary>
+    public event Action<string>? Undone;
 
     // ------------------------------------------------------------- helpers
 

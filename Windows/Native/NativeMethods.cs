@@ -63,6 +63,48 @@ internal static class NativeMethods
     /// <summary>KBDLLHOOKSTRUCT.flags bit: the event was injected (SendInput etc.).</summary>
     public const uint LLKHF_INJECTED = 0x10;
 
+    // ---- Mouse wheel (smooth scrolling) ----
+    public const int WM_MOUSEWHEEL = 0x020A, WM_MOUSEHWHEEL = 0x020E, WM_VSCROLL = 0x0115;
+    public const int SB_LINEUP = 0, SB_LINEDOWN = 1;
+    public const int WHEEL_DELTA = 120;
+    /// <summary>MSLLHOOKSTRUCT.flags bit: the event was injected.</summary>
+    public const uint LLMHF_INJECTED = 0x01;
+    public const int INPUT_MOUSE = 0;
+    public const uint MOUSEEVENTF_WHEEL = 0x0800;
+    public const uint GA_ROOT = 2;
+    public const uint SPI_GETWHEELSCROLLLINES = 0x0068;
+    public const uint WM_TIMER = 0x0113;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
+        public UIntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
+    /// <summary>Reads a window title without sending WM_GETTEXT, so a hung app
+    /// can't stall the mouse hook.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int InternalGetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SystemParametersInfo(uint action, uint param, out int value, uint winIni);
+    [DllImport("user32.dll")] public static extern UIntPtr SetTimer(IntPtr hwnd, UIntPtr id, uint ms, IntPtr proc);
+    [DllImport("user32.dll")] public static extern bool KillTimer(IntPtr hwnd, UIntPtr id);
+    [DllImport("winmm.dll")] public static extern uint timeBeginPeriod(uint ms);
+    [DllImport("winmm.dll")] public static extern uint timeEndPeriod(uint ms);
+
+    /// <summary>Marker in dwExtraInfo of the wheel events smooth scrolling injects.</summary>
+    public static readonly UIntPtr SCROLL_MARKER = (UIntPtr)0x6273736C; // "bssl"
+
     // ---- Message loop for the auto-fix hook thread ----
     [StructLayout(LayoutKind.Sequential)]
     public struct MSG
