@@ -91,6 +91,8 @@ internal static class NativeMethods
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
     /// <summary>Reads a window title without sending WM_GETTEXT, so a hung app
     /// can't stall the mouse hook.</summary>
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

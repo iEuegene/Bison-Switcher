@@ -22,7 +22,7 @@ namespace Kright.Services;
 /// </summary>
 public sealed class SmoothScroller : IDisposable
 {
-    public enum Verdict { None, Smooth, Rows, HighRes, Modifier, Game, Excluded, Elevated, RowsOff }
+    public enum Verdict { None, Smooth, Rows, HighRes, Modifier, Game, Excluded, Elevated, RowsOff, Coarse }
 
     /// <summary>What happened to the last wheel click, for the settings page.
     /// A class, so the UI thread never reads a half-written value.</summary>
@@ -122,6 +122,7 @@ public sealed class SmoothScroller : IDisposable
             _excluded.Contains(target.ExeName) ? Verdict.Excluded :
             target.Game && s.ScrollDisableInGames ? Verdict.Game :
             target.Elevated && !Environment.IsPrivilegedProcess ? Verdict.Elevated :
+            target.Coarse ? Verdict.Coarse :
             target.Calc ? (s.CalcScrollMethod is >= 0 and <= 2 ? Verdict.Rows : Verdict.RowsOff) :
             Verdict.Smooth;
         Last = new LastEvent(v, target.ExeName);
@@ -309,7 +310,10 @@ public sealed class SmoothScroller : IDisposable
 /// <summary>Which app is under the mouse, cached per process so the hook stays fast.</summary>
 internal static class WheelTargets
 {
-    public readonly record struct Target(IntPtr Hwnd, IntPtr Root, string ExeName, bool Game, bool Elevated, bool Calc);
+    /// <param name="Coarse">The window scrolls a full step on every wheel event,
+    /// whatever its size — small smooth steps would fling it to the end. WPF's
+    /// ScrollViewer does this (BS's own window included).</param>
+    public readonly record struct Target(IntPtr Hwnd, IntPtr Root, string ExeName, bool Game, bool Elevated, bool Calc, bool Coarse);
 
     private sealed record ProcInfo(string ExeName, bool Game, bool Elevated, long At);
 
@@ -344,7 +348,11 @@ internal static class WheelTargets
             NativeMethods.InternalGetWindowText(root, sb, sb.Capacity);
             calc = sb.ToString().Contains("LibreOffice Calc", StringComparison.OrdinalIgnoreCase);
         }
-        return new Target(hwnd, root, info.ExeName, info.Game, info.Elevated, calc);
+        // GetClassName sends no message to the app, so a hung window can't stall the hook.
+        var cls = new StringBuilder(64);
+        NativeMethods.GetClassName(root, cls, cls.Capacity);
+        bool coarse = cls.ToString().StartsWith("HwndWrapper[", StringComparison.Ordinal);
+        return new Target(hwnd, root, info.ExeName, info.Game, info.Elevated, calc, coarse);
     }
 }
 
