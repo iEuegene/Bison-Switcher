@@ -27,8 +27,9 @@ public sealed class AppSettings
 
     // ---- Auto-fix (wrong-layout words corrected as you type) ----
     public bool AutoFixEnabled { get; set; } = true;
-    /// <summary>Backspace right after an auto-fix restores what was typed.</summary>
-    public bool AutoFixUndoOnBackspace { get; set; } = true;
+    // Undo is the manual-fix hotkey pressed right after a fix. Backspace no longer
+    // undoes (1.6.0): it made fixing an ending or a space impossible. Old settings
+    // files still carry "AutoFixUndoOnBackspace"; System.Text.Json ignores it.
     /// <summary>An undone word goes to <see cref="NeverConvert"/>.</summary>
     public bool AutoFixLearnFromUndo { get; set; } = true;
     /// <summary>A word fixed twice with the hotkey goes to <see cref="AlwaysConvert"/>.</summary>
@@ -59,6 +60,25 @@ public sealed class AppSettings
 
     public bool ContactLanguageRulesEnabled { get; set; } = true;
     public List<ContactLanguageRule> ContactLanguageRules { get; set; } = new();
+
+    // ---- Smooth scrolling (mouse wheel) ----
+    /// <summary>Off by default: colleagues get the same BS until they opt in.</summary>
+    public bool SmoothScrollEnabled { get; set; } = false;
+    /// <summary>0 = soft, 1 = standard, 2 = fast, 3 = own values below.</summary>
+    public int ScrollPreset { get; set; } = 1;
+    /// <summary>Distance per click, % of the normal Windows click.</summary>
+    public int ScrollStepPercent { get; set; } = 100;
+    public int ScrollDurationMs { get; set; } = 360;
+    /// <summary>Multiplier for fast series of clicks (1 = none).</summary>
+    public double ScrollAcceleration { get; set; } = 2.0;
+    /// <summary>Shift + wheel (horizontal scrolling) is smoothed too.</summary>
+    public bool ScrollShiftSmooth { get; set; } = true;
+    public bool ScrollDisableInGames { get; set; } = true;
+    /// <summary>LibreOffice Calc rows: 0/1/2 = way of sending one row (being
+    /// tested on real machines), 3 = leave Calc's own scrolling alone.</summary>
+    public int CalcScrollMethod { get; set; } = 0;
+    /// <summary>Apps where the wheel stays as Windows makes it.</summary>
+    public List<ExcludedApp> ScrollExcludedApps { get; set; } = new();
 
     private static readonly string Dir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BisonSwitcher");

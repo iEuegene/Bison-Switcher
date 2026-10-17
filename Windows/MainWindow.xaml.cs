@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     private bool _recording;
     private bool _loading = true;
     private LayoutSuggestion? _suggestion;
-    private DispatcherTimer? _statusTimer, _contactStatusTimer, _excludeStatusTimer;
+    private DispatcherTimer? _statusTimer, _contactStatusTimer, _excludeStatusTimer, _scrollExcludeTimer, _adminTimer;
     private readonly Dictionary<RadioButton, FrameworkElement> _pages;
 
     private static readonly SolidColorBrush Lime = new(Color.FromRgb(0xF0, 0xFC, 0x7E));
@@ -47,6 +47,7 @@ public partial class MainWindow : Window
             [NavDict] = PageDict,
             [NavApps] = PageApps,
             [NavLayout] = PageLayout,
+            [NavScroll] = PageScroll,
             [NavSystem] = PageSystem,
             [NavDetect] = PageDetect,
         };
@@ -61,7 +62,7 @@ public partial class MainWindow : Window
         AutoLangCheck.IsChecked = App.Enforcer.Enabled;
         AddressBarCheck.IsChecked = App.Enforcer.AddressBarEnabled;
 
-        UndoCheck.IsChecked = AppSettings.Current.AutoFixUndoOnBackspace;
+        RefreshUndoHint();
         CapitalizeCheck.IsChecked = AppSettings.Current.AutoCapitalize;
         SpellCheck.IsChecked = AppSettings.Current.SpellCheckEnabled;
         RefreshSpellStatus();
@@ -95,6 +96,9 @@ public partial class MainWindow : Window
         ContactLangCheck.IsChecked = App.ContactEnforcer.Enabled;
         FillLayoutChips(ContactLayoutChips, "addContact");
         RefreshContactRulesList();
+
+        LoadScrollPage();
+        RefreshAdminState();
 
         RefreshLayoutMap();
         _loading = false;
@@ -132,6 +136,7 @@ public partial class MainWindow : Window
         UpdateAddButtonLabel();
         UpdateAddContactButtonLabel();
         UpdateExcludeButtonLabel();
+        UpdateScrollExcludeButtonLabel();
         SyncAutoFixToggles();
         RefreshWordLists();
         RefreshLive();
@@ -151,6 +156,7 @@ public partial class MainWindow : Window
     {
         0 => NavOverview,
         2 => NavSystem,   // updates live on the System page
+        3 => NavDict,     // a word was just learned
         _ => NavAutoFix,
     }).IsChecked = true;
 
@@ -187,6 +193,7 @@ public partial class MainWindow : Window
         if (!IsVisible) return;
         RefreshOverview();
         if (PageDetect.Visibility == Visibility.Visible) RefreshDetect();
+        if (PageScroll.Visibility == Visibility.Visible) RefreshScrollLive();
     }
 
     private void RefreshOverview()
@@ -276,10 +283,12 @@ public partial class MainWindow : Window
         AppSettings.Save();
     }
 
-    private void UndoCheck_Click(object sender, RoutedEventArgs e)
+    private void RefreshUndoHint()
     {
-        AppSettings.Current.AutoFixUndoOnBackspace = UndoCheck.IsChecked == true;
-        AppSettings.Save();
+        string hk = App.Hotkey.DisplayString;
+        UndoHotkeyText.Text = hk;
+        UndoHintText.Text = $"Натисніть {hk} одразу після автоматичної заміни, поки не почали наступне слово, — " +
+                            "повернеться набране. Backspace просто стирає символ: закінчення чи пробіл можна правити спокійно.";
     }
 
     private void LearnCheck_Click(object sender, RoutedEventArgs e)
@@ -417,7 +426,7 @@ public partial class MainWindow : Window
                 return;
             case "undo":
                 DiagWord.Text = $"{w.Typed} → {w.Alt}";
-                DiagVerdict.Text = "Скасовано вами (Backspace)";
+                DiagVerdict.Text = "Скасовано вами (хоткей)";
                 DiagVerdict.Foreground = Orange;
                 DiagReason.Text = "Слово додано в «Не виправляти», якщо ввімкнено навчання.";
                 return;
@@ -512,6 +521,7 @@ public partial class MainWindow : Window
         _recording = false;
         RecordButton.Content = "Змінити…";
         HotkeyText.Text = App.Hotkey.DisplayString;
+        RefreshUndoHint();
     }
 
     // ---- Updates ----
@@ -917,6 +927,233 @@ public partial class MainWindow : Window
             }));
         }
         UpdateExcludeButtonLabel();
+    }
+
+    // ---- Smooth scrolling ----
+
+    private bool _scrollLoading;
+
+    private void LoadScrollPage()
+    {
+        var s = AppSettings.Current;
+        _scrollLoading = true;
+        ScrollCheck.IsChecked = s.SmoothScrollEnabled;
+        ShiftScrollCheck.IsChecked = s.ScrollShiftSmooth;
+        GameScrollCheck.IsChecked = s.ScrollDisableInGames;
+        (s.ScrollPreset switch { 0 => PresetSoft, 2 => PresetFast, 3 => PresetCustom, _ => PresetStandard }).IsChecked = true;
+        (s.CalcScrollMethod switch { 1 => CalcB, 2 => CalcC, 3 => CalcOff, _ => CalcA }).IsChecked = true;
+        ShowFeel(SmoothScroller.CurrentFeel());
+        _scrollLoading = false;
+        RefreshScrollExcludedList();
+        RefreshScrollLive();
+    }
+
+    /// <summary>Puts a feel on the sliders without marking it "own values".</summary>
+    private void ShowFeel(ScrollFeel f)
+    {
+        bool was = _scrollLoading;
+        _scrollLoading = true;
+        StepSlider.Value = Math.Round(f.StepFactor * 100);
+        DurationSlider.Value = f.DurationMs;
+        AccelSlider.Value = f.Acceleration;
+        _scrollLoading = was;
+        UpdateFeelLabels();
+    }
+
+    private void UpdateFeelLabels()
+    {
+        if (StepValue is null || DurationValue is null || AccelValue is null) return;
+        StepValue.Text = $"{StepSlider.Value:0}%";
+        DurationValue.Text = $"{DurationSlider.Value:0} мс";
+        AccelValue.Text = AccelSlider.Value <= 1.001 ? "немає" : $"×{AccelSlider.Value:0.##}";
+    }
+
+    private void ScrollCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.SmoothScrollEnabled = ScrollCheck.IsChecked == true;
+        AppSettings.Save();
+        RefreshScrollLive();
+    }
+
+    private void ScrollPreset_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_scrollLoading || sender is not RadioButton { Tag: string tag } || !int.TryParse(tag, out int preset)) return;
+        var s = AppSettings.Current;
+        s.ScrollPreset = preset;
+        AppSettings.Save();
+        ShowFeel(SmoothScroller.CurrentFeel());
+    }
+
+    private void ScrollSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        UpdateFeelLabels();
+        if (_scrollLoading || _loading) return;
+        // Moving a slider means "my own values": start from what is shown now.
+        var s = AppSettings.Current;
+        s.ScrollStepPercent = (int)Math.Round(StepSlider.Value);
+        s.ScrollDurationMs = (int)Math.Round(DurationSlider.Value);
+        s.ScrollAcceleration = Math.Round(AccelSlider.Value, 2);
+        s.ScrollPreset = 3;
+        AppSettings.Save();
+        _scrollLoading = true;
+        PresetCustom.IsChecked = true;
+        _scrollLoading = false;
+    }
+
+    private void ShiftScrollCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.ScrollShiftSmooth = ShiftScrollCheck.IsChecked == true;
+        AppSettings.Save();
+    }
+
+    private void GameScrollCheck_Click(object sender, RoutedEventArgs e)
+    {
+        AppSettings.Current.ScrollDisableInGames = GameScrollCheck.IsChecked == true;
+        AppSettings.Save();
+    }
+
+    private void CalcMethod_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_scrollLoading || sender is not RadioButton { Tag: string tag } || !int.TryParse(tag, out int m)) return;
+        AppSettings.Current.CalcScrollMethod = m;
+        AppSettings.Save();
+    }
+
+    /// <summary>What happened to the last wheel click — so the Calc test and the
+    /// game detection can be checked without guessing.</summary>
+    private void RefreshScrollLive()
+    {
+        if (!AppSettings.Current.SmoothScrollEnabled)
+        {
+            ScrollLiveText.Text = "Вимкнено: коліщатко працює як звичайно.";
+            ScrollLiveText.Foreground = Muted;
+            return;
+        }
+        var last = App.Scroller?.Last;
+        string app = last is { App.Length: > 0 } ? $"{last.App}: " : "";
+        (string text, SolidColorBrush color) = last?.Verdict switch
+        {
+            null or SmoothScroller.Verdict.None => ("Покрутіть коліщатко в будь-якій програмі — тут з'явиться, що BS зробив.", Muted),
+            SmoothScroller.Verdict.Smooth => (app + "плавно ✓", Lime),
+            SmoothScroller.Verdict.Rows => (app + $"LibreOffice Calc, рядок за рядком (спосіб {"ABC"[Math.Clamp(AppSettings.Current.CalcScrollMethod, 0, 2)]})", Lime),
+            SmoothScroller.Verdict.RowsOff => (app + "LibreOffice Calc, звичайна прокрутка", Muted),
+            SmoothScroller.Verdict.HighRes => ("Коліщатко з високою точністю — воно вже плавне, BS його не чіпає.", Muted),
+            SmoothScroller.Verdict.Modifier => ("Ctrl, Alt або Shift затиснуто — звичайна прокрутка.", Muted),
+            SmoothScroller.Verdict.Game => (app + "гра, звичайна прокрутка", Muted),
+            SmoothScroller.Verdict.Excluded => (app + "у списку «Без плавної прокрутки»", Muted),
+            SmoothScroller.Verdict.Elevated => (app + "запущено від адміністратора — Windows не дає BS прокручувати це вікно. Див. «Система» → «Працювати і в адмін-вікнах».", Orange),
+            _ => ("", Muted),
+        };
+        ScrollLiveText.Text = "Остання прокрутка — " + text;
+        ScrollLiveText.Foreground = color;
+    }
+
+    private void UpdateScrollExcludeButtonLabel()
+    {
+        ScrollExcludeButton.Content = App.AppEnforcer.LastExternalAppName is { } n
+            ? $"+ Вимкнути в «{n}»"
+            : "+ Вимкнути в поточній програмі";
+    }
+
+    private void ScrollExcludeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var exePath = App.AppEnforcer.LastExternalExePath;
+        var appName = App.AppEnforcer.LastExternalAppName;
+        if (exePath == null || appName == null)
+        {
+            Flash(ScrollExcludeStatus, ref _scrollExcludeTimer, "Спершу перейдіть у потрібну програму, потім натисніть кнопку.");
+            return;
+        }
+        string exeName = System.IO.Path.GetFileName(exePath);
+        var list = AppSettings.Current.ScrollExcludedApps;
+        if (list.Any(a => string.Equals(a.ExeName, exeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            Flash(ScrollExcludeStatus, ref _scrollExcludeTimer, $"{appName} вже в списку.");
+            return;
+        }
+        list.Add(new ExcludedApp { ExeName = exeName, AppName = appName, ExePath = exePath });
+        AppSettings.Save();
+        App.Scroller?.InvalidateLists();
+        RefreshScrollExcludedList();
+        Flash(ScrollExcludeStatus, ref _scrollExcludeTimer, $"Додано: {appName}.");
+    }
+
+    private void RefreshScrollExcludedList()
+    {
+        ScrollExcludedPanel.Children.Clear();
+        var list = AppSettings.Current.ScrollExcludedApps;
+        if (list.Count == 0)
+            ScrollExcludedPanel.Children.Add(new TextBlock { Text = "Поки порожньо.", Foreground = Faint, FontSize = 12 });
+        foreach (var app in list.ToList())
+        {
+            ScrollExcludedPanel.Children.Add(ListRow(AppIcon(app.ExePath), app.AppName, app.ExeName, null, () =>
+            {
+                AppSettings.Current.ScrollExcludedApps.Remove(app);
+                AppSettings.Save();
+                App.Scroller?.InvalidateLists();
+                RefreshScrollExcludedList();
+            }));
+        }
+        UpdateScrollExcludeButtonLabel();
+    }
+
+    // ---- Admin mode ----
+
+    private void RefreshAdminState()
+    {
+        bool task = StartupManager.ElevatedTaskExists;
+        AdminCheck.IsChecked = task;
+        // With the admin task, it is what starts BS with Windows.
+        StartupCheck.IsEnabled = !task;
+        if (task) StartupCheck.IsChecked = true;
+        StartupCheck.ToolTip = task ? "BS стартує з Windows через режим адміністратора" : null;
+        if (task && !Environment.IsPrivilegedProcess)
+        {
+            AdminStatus.Text = "Режим увімкнено, але зараз BS працює без прав адміністратора — він їх отримає після наступного входу в Windows.";
+            AdminStatus.Foreground = Orange;
+            AdminStatus.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void AdminCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool want = AdminCheck.IsChecked == true;
+        AdminCheck.IsEnabled = false;
+        try
+        {
+            if (want)
+            {
+                if (!StartupManager.EnableElevated())
+                {
+                    AdminCheck.IsChecked = false;
+                    Flash(AdminStatus, ref _adminTimer, "Не вийшло: Windows не дала дозволу.");
+                    AdminStatus.Foreground = Orange;
+                    return;
+                }
+                AdminStatus.Foreground = Lime;
+                Flash(AdminStatus, ref _adminTimer, "Готово. Перезапускаю BS з правами адміністратора…");
+                Dispatcher.InvokeAsync(() => App.Restart(elevated: true), DispatcherPriority.Background);
+            }
+            else
+            {
+                if (!StartupManager.DisableElevated())
+                {
+                    AdminCheck.IsChecked = true;
+                    Flash(AdminStatus, ref _adminTimer, "Не вийшло прибрати режим: Windows не дала дозволу.");
+                    AdminStatus.Foreground = Orange;
+                    return;
+                }
+                AdminStatus.Foreground = Lime;
+                Flash(AdminStatus, ref _adminTimer, "Режим вимкнено. Перезапускаю BS зі звичайними правами…");
+                if (Environment.IsPrivilegedProcess)
+                    Dispatcher.InvokeAsync(() => App.Restart(elevated: false), DispatcherPriority.Background);
+            }
+        }
+        finally
+        {
+            AdminCheck.IsEnabled = true;
+            RefreshAdminState();
+        }
     }
 
     // ---- Personal dictionary ----
